@@ -1,9 +1,19 @@
 # Search traces
 
-Full expert-on, expert-off, Plain, Memory, and Best-of-N logs are not stored
-in Git. They will be checked against the manuscript and linked from this
-README once a public disk archive is available.
+Search logs are not stored in Git. Download the five paper-named archives from
+Google Drive:
 
-Until then, `analysis/` contains the score tables used in the paper.
-`scripts/export_mutation_tables.py` rebuilds Appendix H when the expert-on
-traces are provided separately.
+https://drive.google.com/drive/folders/1cB429RPCAVKbi9GXmarU64Ji5l4WGSNZ?usp=sharing
+
+| Paper name | file |
+|---|---|
+| Expert-guided | `Expert-guided.tar.gz` |
+| Unguided | `Unguided.tar.gz` |
+| Plain | `Plain.tar.gz` |
+| Memory cards | `Memory-cards.tar.gz` |
+| Best-of-N | `Best-of-N.tar.gz` |
+
+Each archive contains five independent runs as `run-1` ??? `run-5`.
+System-role prompt bodies in LLM traces are replaced with `[system prompt]`.
+Score tables used in the paper stay in `analysis/`.
+`scripts/export_mutation_tables.py` rebuilds Appendix H from the Expert-guided traces.

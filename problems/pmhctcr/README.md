@@ -86,7 +86,6 @@ The expert prompt is [`expert_hypotheses.txt`](expert_hypotheses.txt).
 
 ## Search traces
 
-Search traces for expert-on, expert-off, Plain, Memory, and Best-of-N will
-be linked from [`artifacts/`](../../artifacts/README.md) after a contradiction
-check against the manuscript. Score tables are in
-[`analysis/`](../../analysis/README.md).
+Compressed traces for Expert-guided, Unguided, Plain, Memory cards, and
+Best-of-N are on Google Drive (see [`artifacts/`](../../artifacts/README.md)).
+Score tables are in [`analysis/`](../../analysis/README.md).

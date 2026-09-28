@@ -14,4 +14,4 @@
   public trace archive is posted later, `scripts/verify_paper_artifacts.py`
   checks Table 2, Table 3, and Figure 4 summaries against it.
 
-Search logs are not in this Git snapshot. They will be linked from [`artifacts/README.md`](../artifacts/README.md) after they are checked against the paper and posted separately.
+Search logs are not in this Git snapshot. Download them from the Google Drive folder linked in [`artifacts/README.md`](../artifacts/README.md).

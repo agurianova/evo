@@ -36,6 +36,17 @@ python -m pytest tests/pmhctcr tests/evolution/test_python_patch_mutation.py
 `pip install -e ".[pmhctcr]"` adds torch, pyarrow, and transformers for
 refit/score. Search also needs a configured LLM route (Hydra `llm` configs).
 
+## Data availability
+
+Search logs for the five conditions in the paper (Expert-guided, Unguided, Plain,
+Memory cards, and Best-of-N; five runs each) are not stored in Git. They are in
+this Google Drive folder:
+
+https://drive.google.com/drive/folders/1cB429RPCAVKbi9GXmarU64Ji5l4WGSNZ?usp=sharing
+
+Code, the frozen split, the expert prompt, and score tables remain in this
+repository (`problems/pmhctcr/`, `analysis/`).
+
 ## Attribution
 
 GigaEvo is MIT-licensed open source:
