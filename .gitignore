@@ -132,6 +132,7 @@ logs/
 *.hprof
 *.zip
 *.tar.gz
+
 *.tar.bz2
 *.rar
 scratch/
@@ -143,6 +144,8 @@ tmp/
 # ---------------------------------------------------------------------------
 *.csv
 *.json
+# Frozen pMHC-TCR manuscript split is a release artifact.
+!problems/pmhctcr/splits/r0.json
 *.jsonl
 *.pickle
 *.pkl
@@ -163,17 +166,13 @@ tmp/
 *.sqlite3
 
 # Keep these config JSON files in-repo
-!pyrightconfig.json
 
 # Keep dag_tab seed programs required to start evolution
-!problems/dag_tab/initial_programs/*.json
 
 # Keep the frozen Cohn snapshot: the spherical arms are graded against these mu values,
 # and a regenerated one would silently move the baseline they are scored on
-!problems/aaai_submit/_harness/protocol/cohn_snapshot.json
 
 # Keep benchmark history (small, append-only) — rebuild with scripts if lost
-!tools/benchmark_history.jsonl
 
 # ---------------------------------------------------------------------------
 # Generated visual artifacts

@@ -1,4 +1,0 @@
-cfg_*.yaml
-pids_*.txt
-logs/
-latest_smoke.env

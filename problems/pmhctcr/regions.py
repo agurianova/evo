@@ -276,7 +276,9 @@ def _cell(val: Any) -> str:
     return str(val)
 
 
-def _find_germline_cdrs(v: str, vgene: str) -> tuple[tuple[int, int], tuple[int, int]] | None:
+def _find_germline_cdrs(
+    v: str, vgene: str
+) -> tuple[tuple[int, int], tuple[int, int]] | None:
     pair = _GERMLINE_CDR.get(_cell(vgene))
     if not pair or not v:
         return None
@@ -430,11 +432,19 @@ def vj_onehot_from_row(row: pd.Series, *, alpha: bool, beta: bool) -> np.ndarray
     """TRAV/TRAJ and/or TRBV/TRBJ one-hot. Unknown alleles stay zero."""
     parts: list[np.ndarray] = []
     if alpha:
-        parts.append(_onehot(_cell(row.get("tcra_vgene")), _TRAV_INDEX, len(TRAV_ALLELES)))
-        parts.append(_onehot(_cell(row.get("tcra_jgene")), _TRAJ_INDEX, len(TRAJ_ALLELES)))
+        parts.append(
+            _onehot(_cell(row.get("tcra_vgene")), _TRAV_INDEX, len(TRAV_ALLELES))
+        )
+        parts.append(
+            _onehot(_cell(row.get("tcra_jgene")), _TRAJ_INDEX, len(TRAJ_ALLELES))
+        )
     if beta:
-        parts.append(_onehot(_cell(row.get("tcrb_vgene")), _TRBV_INDEX, len(TRBV_ALLELES)))
-        parts.append(_onehot(_cell(row.get("tcrb_jgene")), _TRBJ_INDEX, len(TRBJ_ALLELES)))
+        parts.append(
+            _onehot(_cell(row.get("tcrb_vgene")), _TRBV_INDEX, len(TRBV_ALLELES))
+        )
+        parts.append(
+            _onehot(_cell(row.get("tcrb_jgene")), _TRBJ_INDEX, len(TRBJ_ALLELES))
+        )
     if not parts:
         return np.zeros(1, dtype=np.float64)
     return np.concatenate(parts)

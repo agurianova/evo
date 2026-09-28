@@ -7,13 +7,12 @@ Mechanism/anchor text is not used to choose the operator or patch fields.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from gigaevo.evolution.mutation.constants import MUTATION_CONTEXT_METADATA_KEY
 from gigaevo.programs.program import Program
-
 from problems.pmhctcr.genotype import (
     BATCH_SIZES,
     HIDDEN_DIMS,
@@ -230,9 +229,7 @@ class PrimaryInsight:
         return self.substitute.strip() or self.body.strip()
 
 
-def context_from_parent(
-    parent: Program, memory_instructions: str | None = None
-) -> str:
+def context_from_parent(parent: Program, memory_instructions: str | None = None) -> str:
     chunks: list[str] = []
     if memory_instructions:
         chunks.append(memory_instructions)
@@ -332,7 +329,10 @@ def _map_from_keywords(src: str, parent: Genotype) -> str | None:
         )
     ):
         return "CHANGE_MODEL"
-    if any(k in src for k in ("interaction", "cross_attention", "fusion", "bilinear", "pair")):
+    if any(
+        k in src
+        for k in ("interaction", "cross_attention", "fusion", "bilinear", "pair")
+    ):
         return "CHANGE_INTERACTION"
     if any(
         k in src
@@ -348,7 +348,14 @@ def _map_from_keywords(src: str, parent: Genotype) -> str | None:
         return "CHANGE_SEQUENCE"
     if any(
         k in src
-        for k in ("hard_negative", "sampling", "focal", "contrastive", "weight_decay", "learning_rate")
+        for k in (
+            "hard_negative",
+            "sampling",
+            "focal",
+            "contrastive",
+            "weight_decay",
+            "learning_rate",
+        )
     ) or re.search(r"\blr\b", src):
         return "CHANGE_TRAINING"
     if "inputs.sequence" in src or "inputs.pdb" in src:
@@ -390,7 +397,9 @@ def _canonical_path(raw: str, operator_id: str) -> str | None:
     key = raw.strip().strip("\"'")
     if key in _PATH_ALIASES:
         key = _PATH_ALIASES[key]
-    if not key.startswith(("inputs.", "encoders.", "interaction.", "model.", "training.", "calibration.")):
+    if not key.startswith(
+        ("inputs.", "encoders.", "interaction.", "model.", "training.", "calibration.")
+    ):
         aliased = _PATH_ALIASES.get(key)
         if aliased:
             key = aliased
@@ -606,7 +615,9 @@ def _apply_pair(g: Genotype, pair: str) -> bool:
 def _apply_derived(g: Genotype, op: str, a: str, b: str) -> bool:
     combo = SurfaceDerived(op=op, a=a, b=b)  # type: ignore[arg-type]
     have = {(d.op, d.a, d.b) for d in g.encoders.surface.spots.derived}
-    if (combo.op, combo.a, combo.b) in have or len(g.encoders.surface.spots.derived) >= 8:
+    if (combo.op, combo.a, combo.b) in have or len(
+        g.encoders.surface.spots.derived
+    ) >= 8:
         return False
     g.encoders.surface.spots.derived = list(g.encoders.surface.spots.derived) + [combo]
     g.encoders.surface.spots.enabled = True
@@ -630,7 +641,9 @@ def _apply_spots_enable(g: Genotype, source: str) -> bool:
             su.threshold = 0.5
         changed = True
     match = re.search(r"\b(1\.[0-9]+|0\.[0-9]+)\b", source)
-    if match and ("nn" in source or "l2" in source or "threshold" in source or "spot" in source):
+    if match and (
+        "nn" in source or "l2" in source or "threshold" in source or "spot" in source
+    ):
         thr = _clip(float(match.group(1)), 0.5, 4.0)
         if su.threshold != thr:
             su.threshold = thr
@@ -665,7 +678,10 @@ def apply_guided_operator(g: Genotype, operator_id: str, text: str) -> bool:
                 or changed
             )
     if operator_id == "CREATE_SURFACE" and not surface_on(g):
-        if any(k in source.lower() for k in ("masif", "tcr_direct", "pmhc_flipped", "create_surface")):
+        if any(
+            k in source.lower()
+            for k in ("masif", "tcr_direct", "pmhc_flipped", "create_surface")
+        ):
             recognized = True
             if not g.inputs.masif.tcr_direct:
                 g.inputs.masif.tcr_direct = True
@@ -769,7 +785,10 @@ def _guided_interaction(g: Genotype, blob: str) -> bool:
     if g.interaction.pairs and g.interaction.fusion is None:
         g.interaction.fusion = "concat"
         changed = True
-    if g.interaction.method == "cross_attention" or g.interaction.fusion == "cross_attention":
+    if (
+        g.interaction.method == "cross_attention"
+        or g.interaction.fusion == "cross_attention"
+    ):
         changed = _promote_cross_encoder(g) or changed
     return changed
 
@@ -792,7 +811,9 @@ def _parse_fusion(blob: str) -> str | None:
 
 def _guided_sequence(g: Genotype, blob: str) -> bool:
     enc = g.encoders.sequence
-    arch_ask = any(k in blob for k in ("arch", "cnn", "transformer", "protein_lm", "esm"))
+    arch_ask = any(
+        k in blob for k in ("arch", "cnn", "transformer", "protein_lm", "esm")
+    )
     if (not arch_ask) or "region" in blob:
         for name in (
             "all_cdr",
@@ -852,7 +873,9 @@ def _guided_training(g: Genotype, blob: str) -> bool:
     if "focal" in blob:
         t.loss = "focal"
         gamma = _search_float(blob, ("focal_gamma", "gamma"))
-        t.focal_gamma = _clip(gamma, 0.5, 5.0) if gamma is not None else float(t.focal_gamma or 2.0)
+        t.focal_gamma = (
+            _clip(gamma, 0.5, 5.0) if gamma is not None else float(t.focal_gamma or 2.0)
+        )
         return True
     if "contrastive" in blob:
         if t.loss == "contrastive":

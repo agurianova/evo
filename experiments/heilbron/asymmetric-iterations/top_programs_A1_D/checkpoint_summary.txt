@@ -1,4 +1,0 @@
-Label: A1_D
-DB: 2
-Gen: 13
-Best fitness: 0.40828

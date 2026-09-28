@@ -11,8 +11,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
@@ -22,8 +22,12 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from problems.pmhctcr.assets import ESM2_HIDDEN, ESM2_MODEL_ID, ESM2_RELDIR
-from problems.pmhctcr.dataset import data_root
+from problems.pmhctcr.assets import (  # noqa: E402
+    ESM2_HIDDEN,
+    ESM2_MODEL_ID,
+    ESM2_RELDIR,
+)
+from problems.pmhctcr.dataset import data_root  # noqa: E402
 
 _KIND_PREFIX = {
     "mhca": "mhc",
@@ -49,7 +53,9 @@ def _targets(seqs: dict[str, str]) -> list[tuple[str, str, str]]:
     return out
 
 
-def _encode_batch(model, tokenizer, seqs: list[str], device: torch.device) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+def _encode_batch(
+    model, tokenizer, seqs: list[str], device: torch.device
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
     enc = tokenizer(
         seqs,
         padding=True,
@@ -92,13 +98,19 @@ def main() -> int:
     by_id = out_dir / "by_id"
     by_id.mkdir(parents=True, exist_ok=True)
 
-    pending = [(eid, kind, seq) for eid, kind, seq in jobs if not (by_id / f"{eid}.npz").is_file()]
+    pending = [
+        (eid, kind, seq)
+        for eid, kind, seq in jobs
+        if not (by_id / f"{eid}.npz").is_file()
+    ]
     print(f"esm2 cache: {len(jobs)} sequences, {len(pending)} to encode, dir={out_dir}")
 
     if pending:
         from transformers import AutoTokenizer, EsmModel
 
-        device = torch.device("cuda" if args.cuda and torch.cuda.is_available() else "cpu")
+        device = torch.device(
+            "cuda" if args.cuda and torch.cuda.is_available() else "cpu"
+        )
         print(f"esm2 cache: loading {args.model} on {device}")
         tokenizer = AutoTokenizer.from_pretrained(args.model)
         model = EsmModel.from_pretrained(args.model, add_pooling_layer=False)

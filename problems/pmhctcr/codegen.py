@@ -67,18 +67,24 @@ def _runtime_lines(g: Genotype, insight: str | None) -> list[str]:
     if spec.get("learned_siamese"):
         extra = "siamese_80d"
         cross = extra if cross == "off" else f"{cross}+{extra}"
-    tabs = [n for n, flag in (
-        ("sequence", spec["tabular_sequence"]),
-        ("surface", spec["tabular_surface"]),
-        ("structure", spec["tabular_structure"]),
-    ) if flag]
+    tabs = [
+        n
+        for n, flag in (
+            ("sequence", spec["tabular_sequence"]),
+            ("surface", spec["tabular_surface"]),
+            ("structure", spec["tabular_structure"]),
+        )
+        if flag
+    ]
     spots = (
         f"spots L2<{g.encoders.surface.spots.threshold:g}"
         if g.encoders.surface.spots.enabled
         else "spots off"
     )
     lines = [
-        _py_comment("insight", insight) if insight and str(insight).strip() else "# insight: (unguided)",
+        _py_comment("insight", insight)
+        if insight and str(insight).strip()
+        else "# insight: (unguided)",
         f"# head: {spec['head']}",
         f"# SeqEncoder: {seq}",
         f"# GAT: {gat}",

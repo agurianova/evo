@@ -66,7 +66,9 @@ def _as_genotype(payload: Any) -> Genotype | None:
     genotype = getattr(payload, "genotype", None)
     if isinstance(genotype, Genotype):
         return genotype
-    if isinstance(payload, str) and ("GENOTYPE_JSON" in payload or "def entrypoint" in payload):
+    if isinstance(payload, str) and (
+        "GENOTYPE_JSON" in payload or "def entrypoint" in payload
+    ):
         try:
             try:
                 from problems.pmhctcr.codegen import loads_program
@@ -177,7 +179,9 @@ def _sequence_params(g: Genotype, hidden: int, layers: int) -> tuple[int, int]:
     return params, n_tokens
 
 
-def _structure_params(g: Genotype, hidden: int, layers: int, heads: int) -> tuple[int, int]:
+def _structure_params(
+    g: Genotype, hidden: int, layers: int, heads: int
+) -> tuple[int, int]:
     if not structure_on(g):
         return 0, 0
     st = g.encoders.structure
@@ -358,7 +362,9 @@ PMHC_TCR_INTERACTION_NAMES = (
     "reciprocal_dual_attention",  # 4 — bidirectional / dual-interface cross-attn
     "multi_branch_gated",  # 5 — gated fusion over parallel branches or latent states
 )
-PMHC_TCR_INTERACTION_CODE = {name: i for i, name in enumerate(PMHC_TCR_INTERACTION_NAMES)}
+PMHC_TCR_INTERACTION_CODE = {
+    name: i for i, name in enumerate(PMHC_TCR_INTERACTION_NAMES)
+}
 
 
 def _python_source(payload: Any) -> str:
@@ -391,7 +397,9 @@ def _python_source(payload: Any) -> str:
 
         for name in ("user_code.py", "<pmhctcr_child>"):
             lines = linecache.getlines(name)
-            if lines and any("def entrypoint" in line or "class " in line for line in lines):
+            if lines and any(
+                "def entrypoint" in line or "class " in line for line in lines
+            ):
                 return "".join(lines)
     except Exception:
         pass
@@ -426,7 +434,9 @@ def _arch_kind_from_source(code: str) -> int:
         "pdb_cross_attn",
         "masif_patch_cross",
     )
-    if any(m in fam for m in interface_markers) or any(m in low for m in interface_markers):
+    if any(m in fam for m in interface_markers) or any(
+        m in low for m in interface_markers
+    ):
         interface = True
     # Token-level pMHC↔TCR attention (not flat 3–4 modality vectors).
     token_cues = (

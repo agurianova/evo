@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 
 try:
-    from problems.pmhctcr.assets import ESM2_HIDDEN, MasifAsset, load_esm, load_masif, load_pdb
+    from problems.pmhctcr.assets import (
+        ESM2_HIDDEN,
+        MasifAsset,
+        load_esm,
+        load_masif,
+        load_pdb,
+    )
     from problems.pmhctcr.genotype import (
         Genotype,
         sequence_on,
@@ -54,18 +60,6 @@ def _mhc_text(g: Genotype, df: pd.DataFrame, i: int) -> str:
         # Mature HLA A1/A2 ≈ after the ~24-aa leader through residue ~180.
         return text[24:204] if len(text) > 40 else text
     return text
-
-
-def _physchem(text: str) -> np.ndarray:
-    if not text:
-        return np.zeros(5, dtype=np.float64)
-    hydro = [_HYDRO.get(ch, 0.0) for ch in text]
-    charged = sum(ch in "DEKRH" for ch in text) / len(text)
-    aromatic = sum(ch in "FWY" for ch in text) / len(text)
-    return np.array(
-        [float(np.mean(hydro)), float(np.std(hydro)), charged, aromatic, len(text) / 400.0],
-        dtype=np.float64,
-    )
 
 
 _ESM_PATH_COL = {
@@ -178,7 +172,9 @@ def _seq_block(g: Genotype, df: pd.DataFrame, i: int, mask: bool) -> np.ndarray:
             continue
         parts.append(_aa_frac(text))
     if s.tcr_alpha or s.tcr_beta:
-        parts.append(vj_onehot_from_row(row, alpha=bool(s.tcr_alpha), beta=bool(s.tcr_beta)))
+        parts.append(
+            vj_onehot_from_row(row, alpha=bool(s.tcr_alpha), beta=bool(s.tcr_beta))
+        )
     if not parts:
         return np.zeros(1, dtype=np.float64)
     return np.concatenate(parts)
@@ -225,11 +221,15 @@ def masif_metrics(g: Genotype, asset: MasifAsset) -> np.ndarray:
     pmhc_n = _safe_norm(pmhc)
     cosine = tcr_n @ pmhc_n.T
     dot = tcr @ pmhc.T
-    l2 = np.sqrt(np.clip(
-        (tcr ** 2).sum(axis=1, keepdims=True) + (pmhc ** 2).sum(axis=1)[None, :] - 2.0 * dot,
-        0.0,
-        None,
-    ))
+    l2 = np.sqrt(
+        np.clip(
+            (tcr**2).sum(axis=1, keepdims=True)
+            + (pmhc**2).sum(axis=1)[None, :]
+            - 2.0 * dot,
+            0.0,
+            None,
+        )
+    )
     valid_cos = cosine[mask]
     valid_dot = dot[mask]
     valid_l2 = l2[mask]
@@ -260,14 +260,22 @@ def masif_metrics(g: Genotype, asset: MasifAsset) -> np.ndarray:
 
 
 def _masif_block(g: Genotype, df: pd.DataFrame, i: int) -> np.ndarray:
-    tcr_path = str(df.iloc[i]["masif_tcr_path"]) if "masif_tcr_path" in df.columns else ""
-    pmhc_path = str(df.iloc[i]["masif_pmhc_path"]) if "masif_pmhc_path" in df.columns else ""
+    tcr_path = (
+        str(df.iloc[i]["masif_tcr_path"]) if "masif_tcr_path" in df.columns else ""
+    )
+    pmhc_path = (
+        str(df.iloc[i]["masif_pmhc_path"]) if "masif_pmhc_path" in df.columns else ""
+    )
     asset = load_masif(tcr_path, pmhc_path)
     parts: list[np.ndarray] = []
     if g.inputs.masif.tcr_direct:
-        parts.append(asset.tcr_pooled.astype(np.float64) if asset.ok_tcr else np.zeros(80))
+        parts.append(
+            asset.tcr_pooled.astype(np.float64) if asset.ok_tcr else np.zeros(80)
+        )
     if g.inputs.masif.pmhc_flipped:
-        parts.append(asset.pmhc_pooled.astype(np.float64) if asset.ok_pmhc else np.zeros(80))
+        parts.append(
+            asset.pmhc_pooled.astype(np.float64) if asset.ok_pmhc else np.zeros(80)
+        )
     parts.append(masif_metrics(g, asset))
     if g.encoders.surface.spots.enabled:
         parts.append(spot_feature_vector(g, asset, df.iloc[i]))
@@ -315,7 +323,7 @@ def _pdb_block(g: Genotype, df: pd.DataFrame, i: int, *, train: bool) -> np.ndar
     d_all = np.linalg.norm(xyz[:, None, :] - xyz[None, :, :], axis=-1)
     inter = (chain[:, None] != chain[None, :]) & np.isfinite(d_all)
     contact_r = float(st.edges.radius_A or 8.0)
-    interface_node = ((inter & (d_all <= 8.0)).sum(axis=1) > 0)
+    interface_node = (inter & (d_all <= 8.0)).sum(axis=1) > 0
     if st.scope == "interface" and interface_node.any():
         keep = interface_node
         xyz, chain, aa = xyz[keep], chain[keep], aa[keep]
@@ -340,7 +348,7 @@ def _pdb_block(g: Genotype, df: pd.DataFrame, i: int, *, train: bool) -> np.ndar
             w = np.exp(-dist)
             w = w / w.sum()
         elif st.arch == "egnn":
-            w = (1.0 / dist)
+            w = 1.0 / dist
             w = w / w.sum()
         elif st.arch == "se3_transformer":
             # Two-hop proxy: mix 1-hop with a wider mean.
@@ -373,11 +381,13 @@ def _pdb_block(g: Genotype, df: pd.DataFrame, i: int, *, train: bool) -> np.ndar
     #           (A/B=TCR, C=peptide, D=MHC)
     #   [27]    fraction of Cα with an 8Å inter-chain neighbour
     #   [28]    n_Cα / 4000
-    return np.concatenate([
-        graph_pool,
-        np.asarray(pair_d, dtype=np.float64),
-        np.array([n_iface, n_ca], dtype=np.float64),
-    ])
+    return np.concatenate(
+        [
+            graph_pool,
+            np.asarray(pair_d, dtype=np.float64),
+            np.array([n_iface, n_ca], dtype=np.float64),
+        ]
+    )
 
 
 def _align_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -398,7 +408,7 @@ def _cross_attn(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     n = min(a.size, b.size)
     if n == 0:
         return np.zeros(1)
-    score = float(np.dot(a[:n], b[:n]) / (n ** 0.5))
+    score = float(np.dot(a[:n], b[:n]) / (n**0.5))
     w = 1.0 / (1.0 + np.exp(-score))
     return w * a[:n] + (1.0 - w) * b[:n]
 
@@ -415,7 +425,9 @@ def _pair_op(g: Genotype, a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return _align_mul(a, b)
 
 
-def _molecule_vecs(g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.ndarray) -> dict[str, np.ndarray]:
+def _molecule_vecs(
+    g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.ndarray
+) -> dict[str, np.ndarray]:
     """Per-molecule views for numpy interaction pairs. Sequence slices exclude V/J."""
     vecs = {"peptide": np.zeros(1), "mhc": np.zeros(1), "tcr": np.zeros(1)}
     if sequence_on(g) and seq.size > 1:
@@ -457,7 +469,9 @@ def _molecule_vecs(g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.ndar
     return vecs
 
 
-def _interaction_block(g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.ndarray) -> np.ndarray:
+def _interaction_block(
+    g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.ndarray
+) -> np.ndarray:
     if not g.interaction.pairs:
         return np.zeros(1, dtype=np.float64)
     mol = _molecule_vecs(g, seq, masif, pdb)
@@ -486,7 +500,9 @@ def _interaction_block(g: Genotype, seq: np.ndarray, masif: np.ndarray, pdb: np.
     return fused
 
 
-def _row_features(g: Genotype, df: pd.DataFrame, i: int, *, train: bool) -> dict[str, np.ndarray]:
+def _row_features(
+    g: Genotype, df: pd.DataFrame, i: int, *, train: bool
+) -> dict[str, np.ndarray]:
     # Features follow input flags, not model.type. Type only chooses learned
     # torch modules and extra fusion channels.
     seq = _seq_block(g, df, i, mask=train) if sequence_on(g) else np.zeros(1)
@@ -498,7 +514,12 @@ def _row_features(g: Genotype, df: pd.DataFrame, i: int, *, train: bool) -> dict
 
 def _fuse_model(g: Genotype, blocks: dict[str, np.ndarray]) -> np.ndarray:
     t = g.model.type
-    seq, surf, pdb, inter = blocks["seq"], blocks["surf"], blocks["pdb"], blocks["inter"]
+    seq, surf, pdb, inter = (
+        blocks["seq"],
+        blocks["surf"],
+        blocks["pdb"],
+        blocks["inter"],
+    )
     chunks: list[np.ndarray] = []
     if sequence_on(g):
         chunks.append(seq)
@@ -524,7 +545,9 @@ def build_feature_matrix(
 ) -> np.ndarray:
     if len(df) == 0:
         return np.zeros((0, 1), dtype=np.float64)
-    rows = [_fuse_model(g, _row_features(g, df, i, train=train)) for i in range(len(df))]
+    rows = [
+        _fuse_model(g, _row_features(g, df, i, train=train)) for i in range(len(df))
+    ]
     width = max(r.size for r in rows)
     out = np.zeros((len(rows), width), dtype=np.float64)
     for i, r in enumerate(rows):
@@ -532,7 +555,9 @@ def build_feature_matrix(
     return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
 
 
-def hard_negative_index(df: pd.DataFrame, g: Genotype, rng: np.random.Generator) -> np.ndarray:
+def hard_negative_index(
+    df: pd.DataFrame, g: Genotype, rng: np.random.Generator
+) -> np.ndarray:
     """Keep all train positives; downsample negatives, preferring same pMHC."""
     y = df["label"].to_numpy(dtype=int)
     pos = np.where(y == 1)[0]
@@ -558,8 +583,12 @@ def hard_negative_index(df: pd.DataFrame, g: Genotype, rng: np.random.Generator)
     if n_easy > 0 and remain.size:
         picked.append(rng.choice(remain, size=min(n_easy, remain.size), replace=False))
     elif n_easy > 0:
-        leftover = np.setdiff1d(neg, np.concatenate(picked) if picked else np.array([], dtype=int))
+        leftover = np.setdiff1d(
+            neg, np.concatenate(picked) if picked else np.array([], dtype=int)
+        )
         if leftover.size:
-            picked.append(rng.choice(leftover, size=min(n_easy, leftover.size), replace=False))
+            picked.append(
+                rng.choice(leftover, size=min(n_easy, leftover.size), replace=False)
+            )
     neg_keep = np.concatenate(picked) if picked else neg[:n_keep]
     return np.sort(np.concatenate([pos, neg_keep]))

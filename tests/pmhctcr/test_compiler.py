@@ -92,6 +92,7 @@ def test_interaction_enters_score():
 
 def test_hidden_layers_follow_num_layers():
     from sklearn.linear_model import LogisticRegression
+
     from problems.pmhctcr.compiler import hidden_layer_sizes
     from problems.pmhctcr.nn_model import TorchPredictor
 
@@ -139,12 +140,17 @@ def test_dropout_and_scheduler_change_torch_head():
 
 def test_within_pmhc_rank_loss_prefers_correct_order():
     import torch
+
     from problems.pmhctcr.nn_model import _pmhc_pair_slices, _within_pmhc_rank_loss
 
     y = torch.tensor([1, 1, 0, 0, 1, 0])
     pmhc = torch.tensor([0, 0, 0, 0, 1, 1])
-    good = _within_pmhc_rank_loss(torch.tensor([2.0, 2.1, -1.0, -1.2, 3.0, -2.0]), y, pmhc)
-    bad = _within_pmhc_rank_loss(torch.tensor([-2.0, -2.1, 1.0, 1.2, -3.0, 2.0]), y, pmhc)
+    good = _within_pmhc_rank_loss(
+        torch.tensor([2.0, 2.1, -1.0, -1.2, 3.0, -2.0]), y, pmhc
+    )
+    bad = _within_pmhc_rank_loss(
+        torch.tensor([-2.0, -2.1, 1.0, 1.2, -3.0, 2.0]), y, pmhc
+    )
     assert good is not None and bad is not None
     assert float(good) < float(bad)
 

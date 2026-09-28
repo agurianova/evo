@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING
 from gigaevo.evolution.mutation.base import MutationOperator, MutationSpec
 from gigaevo.llm.bandit import MutationOutcome, compute_bandit_reward
 from gigaevo.programs.program import Program
-
 from problems.pmhctcr.codegen import loads_program, render_program
 from problems.pmhctcr.genotype import OPERATOR_IDS, functional_dumps
 from problems.pmhctcr.insight_exec import (
@@ -77,7 +76,9 @@ class PmhctcrMutationOperator(MutationOperator):
                 "pmhctcr_operator": child.meta.operator_applied,
                 "pmhctcr_parent_fitness": parent_fit,
                 "pmhctcr_guided": bool(guided_text),
-                "pmhctcr_insight_type": insight.type if guided_text and insight else None,
+                "pmhctcr_insight_type": insight.type
+                if guided_text and insight
+                else None,
             },
         )
 
@@ -105,7 +106,9 @@ class PmhctcrMutationOperator(MutationOperator):
             self._penalize(applied)
             return None, False
         self._seen_functional.add(key)
-        return self._spec(child, parent_prog, insight, guided_text, parent_fit, op), False
+        return self._spec(
+            child, parent_prog, insight, guided_text, parent_fit, op
+        ), False
 
     def _candidate_ops(self, parent, guided_op: str | None, run_step: int) -> list[str]:
         if guided_op:
@@ -175,8 +178,12 @@ class PmhctcrMutationOperator(MutationOperator):
         op = (program.metadata or {}).get("pmhctcr_operator")
         if not op:
             return
-        parent_fit = float((program.metadata or {}).get("pmhctcr_parent_fitness") or 0.0)
-        if outcome == MutationOutcome.REJECTED_ACCEPTOR or str(op).endswith("_REJECTED"):
+        parent_fit = float(
+            (program.metadata or {}).get("pmhctcr_parent_fitness") or 0.0
+        )
+        if outcome == MutationOutcome.REJECTED_ACCEPTOR or str(op).endswith(
+            "_REJECTED"
+        ):
             self.scheduler.update_reward(str(op), 0.0)
             return
         child_fit = 0.0

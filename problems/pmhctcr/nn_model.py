@@ -132,13 +132,19 @@ def _encode_aa(text: str, max_len: int) -> np.ndarray:
 
 def _seq_max(g: Genotype) -> tuple[int, int, int]:
     region = g.encoders.sequence.region
-    tcr = 20 if region in {"cdr3"} else (40 if region in {"cdr1", "cdr2", "all_cdr"} else _MAX_TCR)
+    tcr = (
+        20
+        if region in {"cdr3"}
+        else (40 if region in {"cdr1", "cdr2", "all_cdr"} else _MAX_TCR)
+    )
     mhc = 32 if region == "groove_a1a2" else _MAX_MHC
     return _MAX_PEP, mhc, tcr
 
 
 class ResidualMLP(nn.Module):
-    def __init__(self, in_dim: int, hidden: int, n_layers: int, dropout: float, residual: bool):
+    def __init__(
+        self, in_dim: int, hidden: int, n_layers: int, dropout: float, residual: bool
+    ):
         super().__init__()
         self.residual = residual
         n_hidden = max(int(n_layers) - 1, 1)
@@ -342,7 +348,9 @@ class PmhctcrNet(nn.Module):
         self._dh = dh
         need_mha = uses_pair_cross(g) or uses_modality_cross(g)
         if need_mha:
-            self.cross = nn.MultiheadAttention(dh, heads, dropout=g.model.dropout, batch_first=True)
+            self.cross = nn.MultiheadAttention(
+                dh, heads, dropout=g.model.dropout, batch_first=True
+            )
         if g.encoders.sequence.arch == "protein_lm" and need_mha:
             self.lm_proj = nn.Linear(ESM2_HIDDEN, dh)
             if not uses_learned_sequence(g):
@@ -373,7 +381,9 @@ class PmhctcrNet(nn.Module):
         )
         self._h = h
 
-    def _token_vec(self, batch: dict[str, torch.Tensor], key: str, ids_key: str) -> torch.Tensor | None:
+    def _token_vec(
+        self, batch: dict[str, torch.Tensor], key: str, ids_key: str
+    ) -> torch.Tensor | None:
         if self.seq_enc is not None:
             return self.seq_enc(batch[ids_key])
         if self.lm_proj is not None and key in batch:
@@ -450,10 +460,18 @@ class PmhctcrNet(nn.Module):
         return logits, x
 
 
-def _tokenize_row(g: Genotype, row: pd.Series, pep_n: int, mhc_n: int, tcr_n: int) -> dict[str, np.ndarray]:
+def _tokenize_row(
+    g: Genotype, row: pd.Series, pep_n: int, mhc_n: int, tcr_n: int
+) -> dict[str, np.ndarray]:
     region = g.encoders.sequence.region
-    pep = str(row["epitope_seq"]) if "epitope_seq" in row and pd.notna(row["epitope_seq"]) else ""
-    mhc = str(row["mhca_seq"]) if "mhca_seq" in row and pd.notna(row["mhca_seq"]) else ""
+    pep = (
+        str(row["epitope_seq"])
+        if "epitope_seq" in row and pd.notna(row["epitope_seq"])
+        else ""
+    )
+    mhc = (
+        str(row["mhca_seq"]) if "mhca_seq" in row and pd.notna(row["mhca_seq"]) else ""
+    )
     if region == "groove_a1a2" and mhc:
         mhc = mhc[24:204] if len(mhc) > 40 else mhc
     tcra = chain_region_from_row(row, "a", region)
@@ -499,8 +517,16 @@ def _pdb_tensors(g: Genotype, path: str) -> tuple[np.ndarray, np.ndarray, np.nda
 
 def _masif_pooled(tcr_path: str, pmhc_path: str) -> tuple[np.ndarray, np.ndarray]:
     asset = load_masif(tcr_path, pmhc_path)
-    tcr = asset.tcr_pooled.astype(np.float32) if asset.ok_tcr else np.zeros(80, dtype=np.float32)
-    pmhc = asset.pmhc_pooled.astype(np.float32) if asset.ok_pmhc else np.zeros(80, dtype=np.float32)
+    tcr = (
+        asset.tcr_pooled.astype(np.float32)
+        if asset.ok_tcr
+        else np.zeros(80, dtype=np.float32)
+    )
+    pmhc = (
+        asset.pmhc_pooled.astype(np.float32)
+        if asset.ok_pmhc
+        else np.zeros(80, dtype=np.float32)
+    )
     return tcr, pmhc
 
 
@@ -517,7 +543,9 @@ def _masif_patches(tcr_path: str, pmhc_path: str) -> tuple[np.ndarray, np.ndarra
     return tcr, pmhc
 
 
-def _stack_batch(g: Genotype, df: pd.DataFrame, tab: np.ndarray, device: torch.device) -> dict[str, torch.Tensor]:
+def _stack_batch(
+    g: Genotype, df: pd.DataFrame, tab: np.ndarray, device: torch.device
+) -> dict[str, torch.Tensor]:
     pep_n, mhc_n, tcr_n = _seq_max(g)
     n = len(df)
     pep = np.zeros((n, pep_n), np.int64)
@@ -557,18 +585,38 @@ def _stack_batch(g: Genotype, df: pd.DataFrame, tab: np.ndarray, device: torch.d
     if uses_patch_cross(g):
         tps, pps = [], []
         for i in range(n):
-            tcr_p = str(df.iloc[i]["masif_tcr_path"]) if "masif_tcr_path" in df.columns else ""
-            pmhc_p = str(df.iloc[i]["masif_pmhc_path"]) if "masif_pmhc_path" in df.columns else ""
+            tcr_p = (
+                str(df.iloc[i]["masif_tcr_path"])
+                if "masif_tcr_path" in df.columns
+                else ""
+            )
+            pmhc_p = (
+                str(df.iloc[i]["masif_pmhc_path"])
+                if "masif_pmhc_path" in df.columns
+                else ""
+            )
             t, p = _masif_patches(tcr_p, pmhc_p)
             tps.append(t)
             pps.append(p)
-        out["tcr_patch"] = torch.as_tensor(np.stack(tps), dtype=torch.float32, device=device)
-        out["pmhc_patch"] = torch.as_tensor(np.stack(pps), dtype=torch.float32, device=device)
+        out["tcr_patch"] = torch.as_tensor(
+            np.stack(tps), dtype=torch.float32, device=device
+        )
+        out["pmhc_patch"] = torch.as_tensor(
+            np.stack(pps), dtype=torch.float32, device=device
+        )
     if uses_siamese(g) or (uses_modality_cross(g) and surface_on(g)):
         tcr_pools, pmhc_pools, cats = [], [], []
         for i in range(n):
-            tcr_p = str(df.iloc[i]["masif_tcr_path"]) if "masif_tcr_path" in df.columns else ""
-            pmhc_p = str(df.iloc[i]["masif_pmhc_path"]) if "masif_pmhc_path" in df.columns else ""
+            tcr_p = (
+                str(df.iloc[i]["masif_tcr_path"])
+                if "masif_tcr_path" in df.columns
+                else ""
+            )
+            pmhc_p = (
+                str(df.iloc[i]["masif_pmhc_path"])
+                if "masif_pmhc_path" in df.columns
+                else ""
+            )
             t80, p80 = _masif_pooled(tcr_p, pmhc_p)
             tcr_pools.append(t80)
             pmhc_pools.append(p80)
@@ -577,13 +625,23 @@ def _stack_batch(g: Genotype, df: pd.DataFrame, tab: np.ndarray, device: torch.d
                 sides.append(t80)
             if g.inputs.masif.pmhc_flipped:
                 sides.append(p80)
-            cats.append(np.concatenate(sides) if sides else np.zeros(80, dtype=np.float32))
+            cats.append(
+                np.concatenate(sides) if sides else np.zeros(80, dtype=np.float32)
+            )
         if uses_siamese(g):
-            out["tcr_pool"] = torch.as_tensor(np.stack(tcr_pools), dtype=torch.float32, device=device)
-            out["pmhc_pool"] = torch.as_tensor(np.stack(pmhc_pools), dtype=torch.float32, device=device)
+            out["tcr_pool"] = torch.as_tensor(
+                np.stack(tcr_pools), dtype=torch.float32, device=device
+            )
+            out["pmhc_pool"] = torch.as_tensor(
+                np.stack(pmhc_pools), dtype=torch.float32, device=device
+            )
         if uses_modality_cross(g) and surface_on(g):
-            out["masif_cat"] = torch.as_tensor(np.stack(cats), dtype=torch.float32, device=device)
-    if g.encoders.sequence.arch == "protein_lm" and (uses_pair_cross(g) or uses_modality_cross(g)):
+            out["masif_cat"] = torch.as_tensor(
+                np.stack(cats), dtype=torch.float32, device=device
+            )
+    if g.encoders.sequence.arch == "protein_lm" and (
+        uses_pair_cross(g) or uses_modality_cross(g)
+    ):
         try:
             from problems.pmhctcr.features import esm_channel_vecs
         except ImportError:
@@ -595,7 +653,9 @@ def _stack_batch(g: Genotype, df: pd.DataFrame, tab: np.ndarray, device: torch.d
             )
     if "mhc_epitope_id" in df.columns:
         codes, _ = pd.factorize(df["mhc_epitope_id"].astype(str), sort=True)
-        out["pmhc"] = torch.as_tensor(np.asarray(codes), dtype=torch.long, device=device)
+        out["pmhc"] = torch.as_tensor(
+            np.asarray(codes), dtype=torch.long, device=device
+        )
     else:
         out["pmhc"] = torch.zeros(n, dtype=torch.long, device=device)
     return out
@@ -655,14 +715,16 @@ def _pmhc_pair_slices(
     return groups or fallback
 
 
-def _aux_loss(g: Genotype, logits: torch.Tensor, y: torch.Tensor, embed: torch.Tensor) -> torch.Tensor:
+def _aux_loss(
+    g: Genotype, logits: torch.Tensor, y: torch.Tensor, embed: torch.Tensor
+) -> torch.Tensor:
     yf = y.float()
     if g.training.loss == "focal":
         gamma = float(g.training.focal_gamma or 2.0)
         p = torch.sigmoid(logits)
         ce = F.binary_cross_entropy_with_logits(logits, yf, reduction="none")
         mod = torch.where(y.bool(), 1.0 - p, p)
-        return ((mod ** gamma) * ce).mean()
+        return ((mod**gamma) * ce).mean()
     bce = F.binary_cross_entropy_with_logits(logits, yf)
     if g.training.loss != "contrastive":
         return bce
@@ -706,7 +768,9 @@ def _scheduler(g: Genotype, opt: torch.optim.Optimizer, epochs: int):
     if name == "cosine":
         return torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(epochs, 1))
     if name == "step":
-        return torch.optim.lr_scheduler.StepLR(opt, step_size=max(epochs // 3, 1), gamma=0.5)
+        return torch.optim.lr_scheduler.StepLR(
+            opt, step_size=max(epochs // 3, 1), gamma=0.5
+        )
     return None
 
 
@@ -721,7 +785,11 @@ class TorchPredictor:
 
     def fit(self, train_df: pd.DataFrame) -> None:
         g = self.genotype
-        y_all = train_df["label"].to_numpy(dtype=int) if "label" in train_df.columns else np.zeros(len(train_df), dtype=int)
+        y_all = (
+            train_df["label"].to_numpy(dtype=int)
+            if "label" in train_df.columns
+            else np.zeros(len(train_df), dtype=int)
+        )
         self._prior = float(y_all.mean()) if len(y_all) else 0.1
         rng = np.random.default_rng(int(g.seed) + 7)
         idx = hard_negative_index(train_df, g, rng)

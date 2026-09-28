@@ -208,9 +208,9 @@ class Encoders(_Strict):
 
 
 class Interaction(_Strict):
-    pairs: list[
-        Literal["peptide_tcr", "peptide_mhc", "mhc_tcr", "peptide_mhc_tcr"]
-    ] = Field(default_factory=list)
+    pairs: list[Literal["peptide_tcr", "peptide_mhc", "mhc_tcr", "peptide_mhc_tcr"]] = (
+        Field(default_factory=list)
+    )
     method: Literal["product", "abs_diff", "bilinear", "cross_attention"] | None = None
     fusion: Literal["concat", "gated_sum", "cross_attention"] | None = None
 
@@ -332,7 +332,9 @@ def structure_on(g: Genotype) -> bool:
 
 
 def has_peptide(g: Genotype) -> bool:
-    return g.inputs.sequence.peptide or g.inputs.pdb.present or g.inputs.masif.pmhc_flipped
+    return (
+        g.inputs.sequence.peptide or g.inputs.pdb.present or g.inputs.masif.pmhc_flipped
+    )
 
 
 def has_mhc(g: Genotype) -> bool:
@@ -395,7 +397,10 @@ def uses_learned_gat(g: Genotype) -> bool:
 
 def uses_pair_cross(g: Genotype) -> bool:
     """Pooled peptide/MHC ↔ TCR MultiheadAttention (1 token each)."""
-    if g.interaction.method == "cross_attention" or g.interaction.fusion == "cross_attention":
+    if (
+        g.interaction.method == "cross_attention"
+        or g.interaction.fusion == "cross_attention"
+    ):
         return True
     return g.model.type == "seq_cross_encoder"
 

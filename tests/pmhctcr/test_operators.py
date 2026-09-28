@@ -6,7 +6,13 @@ import pytest
 
 from problems.pmhctcr.codegen import loads_program, render_program
 from problems.pmhctcr.compiler import compile_genotype
-from problems.pmhctcr.genotype import OPERATOR_IDS, default_genotype, dumps, loads, n_active_inputs
+from problems.pmhctcr.genotype import (
+    OPERATOR_IDS,
+    default_genotype,
+    dumps,
+    loads,
+    n_active_inputs,
+)
 from problems.pmhctcr.operators import apply_operator, is_applicable
 from problems.pmhctcr.repair import integrity_errors, repair
 
@@ -41,7 +47,10 @@ def test_change_input_does_not_drop_last_source():
     for _ in range(20):
         child = apply_operator(g, "CHANGE_INPUT", rng=rng)
         assert n_active_inputs(child) >= 1
-        assert not str(child.meta.operator_applied).endswith("_REJECTED") or n_active_inputs(child) >= 1
+        assert (
+            not str(child.meta.operator_applied).endswith("_REJECTED")
+            or n_active_inputs(child) >= 1
+        )
 
 
 def test_change_sequence_rejected_without_sequence():
@@ -126,7 +135,17 @@ def test_change_sequence_region_mhc_cannot_be_cdr():
     rng = np.random.default_rng(11)
     for _ in range(40):
         g = apply_operator(g, "CHANGE_SEQUENCE", rng=rng)
-        if g.encoders.sequence.region in {"cdr1", "cdr2", "cdr3", "all_cdr", "fr1", "fr2", "fr3", "fr4", "all_fr"}:
+        if g.encoders.sequence.region in {
+            "cdr1",
+            "cdr2",
+            "cdr3",
+            "all_cdr",
+            "fr1",
+            "fr2",
+            "fr3",
+            "fr4",
+            "all_fr",
+        }:
             raise AssertionError(g.encoders.sequence.region)
         assert g.encoders.sequence.region in {"full", "groove_a1a2", "mask"}
 
@@ -165,7 +184,10 @@ def test_mutate_single_uses_existing_mutation_operator_base():
         *OPERATOR_IDS,
         *(f"{x}_REJECTED" for x in OPERATOR_IDS if x != "NOOP"),
     }
-    assert spec.metadata[MutationSpec.META_OUTPUT]["operator"] == child.meta.operator_applied
+    assert (
+        spec.metadata[MutationSpec.META_OUTPUT]["operator"]
+        == child.meta.operator_applied
+    )
 
 
 def test_validate_accepts_genotype_json():
@@ -175,7 +197,9 @@ def test_validate_accepts_genotype_json():
 
     problem_dir = Path(__file__).resolve().parents[2] / "problems" / "pmhctcr"
     sys.path.insert(0, str(problem_dir))
-    spec = spec_from_file_location("_pmhctcr_validate_json", problem_dir / "validate.py")
+    spec = spec_from_file_location(
+        "_pmhctcr_validate_json", problem_dir / "validate.py"
+    )
     assert spec is not None and spec.loader is not None
     module = module_from_spec(spec)
     spec.loader.exec_module(module)

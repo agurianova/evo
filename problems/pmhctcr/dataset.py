@@ -109,7 +109,9 @@ def load_folds(root: Path | None = None) -> dict[Fold, pd.DataFrame]:
     return apply_split(load_joined(root))
 
 
-def load_cv3_folds(root: Path | None = None) -> list[tuple[pd.DataFrame, pd.DataFrame, str]]:
+def load_cv3_folds(
+    root: Path | None = None,
+) -> list[tuple[pd.DataFrame, pd.DataFrame, str]]:
     """Leave-one-pMHC-out: 2 pMHCs train, 1 pMHC val, three rotations."""
     df = load_joined(root)
     ids = sorted(df["mhc_epitope_id"].astype(str).unique())

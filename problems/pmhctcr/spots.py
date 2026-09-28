@@ -159,7 +159,11 @@ def masif_complementarity_stats(
         "n_match": float(n_match),
         "area_frac": float(n_match / max(len(match), 1)),
         "min_nn": float(nn.min()) if nn.size else 0.0,
-        "mean_nn": float(nn[match].mean()) if n_match else float(nn.mean()) if nn.size else 0.0,
+        "mean_nn": float(nn[match].mean())
+        if n_match
+        else float(nn.mean())
+        if nn.size
+        else 0.0,
         "n_components": 0.0,
         "max_component_size": 0.0,
         "trace_length": 0.0,
@@ -355,7 +359,9 @@ def core_spot_features(
         zeros["dist_peptide"] = float(np.linalg.norm(com.astype(np.float64) - pep))
         zeros["dist_mhc"] = float(np.linalg.norm(com.astype(np.float64) - mhc))
         if np.any(cdr3_com):
-            zeros["dist_cdr3"] = float(np.linalg.norm(com.astype(np.float64) - cdr3_com))
+            zeros["dist_cdr3"] = float(
+                np.linalg.norm(com.astype(np.float64) - cdr3_com)
+            )
     return zeros
 
 

@@ -1,4 +1,0 @@
-TASK — TABULAR REGRESSION (regression-num-medium-0-pol)
-
-COLUMNS (assembled X[:, j], left to right)
-- [0-25]     numeric

@@ -10,8 +10,8 @@ import numpy as np
 from problems.pmhctcr.genotype import (
     BATCH_SIZES,
     HIDDEN_DIMS,
-    INTERACTION_PAIRS,
     INPUT_FLAGS,
+    INTERACTION_PAIRS,
     MULTIMODAL_TYPES,
     NUM_HEADS,
     OPERATOR_IDS,
@@ -29,7 +29,12 @@ from problems.pmhctcr.genotype import (
     structure_on,
     surface_on,
 )
-from problems.pmhctcr.repair import check_integrity, has_working_encoder, integrity_errors, repair
+from problems.pmhctcr.repair import (
+    check_integrity,
+    has_working_encoder,
+    integrity_errors,
+    repair,
+)
 
 EARLY_OPS = (
     "CHANGE_INPUT",
@@ -120,7 +125,9 @@ def _change_sequence(g: Genotype, rng: np.random.Generator) -> None:
 
 def _change_structure(g: Genotype, rng: np.random.Generator) -> None:
     field = str(
-        rng.choice(["scope", "edges.type", "edges.k", "edges.radius_A", "arch", "pooling"])
+        rng.choice(
+            ["scope", "edges.type", "edges.k", "edges.radius_A", "arch", "pooling"]
+        )
     )
     st = g.encoders.structure
     if field == "scope":
@@ -174,7 +181,11 @@ def _change_surface(g: Genotype, rng: np.random.Generator) -> None:
         )
     )
     if field == "threshold":
-        su.spots.threshold = float(rng.uniform(1.2, 2.4)) if su.spots.metric == "l2" else float(rng.uniform(0.5, 0.85))
+        su.spots.threshold = (
+            float(rng.uniform(1.2, 2.4))
+            if su.spots.metric == "l2"
+            else float(rng.uniform(0.5, 0.85))
+        )
         return
     if field == "metric":
         su.spots.metric = _choice_other(rng, ["l2", "cosine"], su.spots.metric)
@@ -246,9 +257,14 @@ def _change_interaction(g: Genotype, rng: np.random.Generator) -> None:
         return
     if aspect == "method":
         g.interaction.method = _choice_other(
-            rng, ["product", "abs_diff", "bilinear", "cross_attention"], g.interaction.method
+            rng,
+            ["product", "abs_diff", "bilinear", "cross_attention"],
+            g.interaction.method,
         )
-        if g.interaction.method == "cross_attention" and g.encoders.sequence.arch != "protein_lm":
+        if (
+            g.interaction.method == "cross_attention"
+            and g.encoders.sequence.arch != "protein_lm"
+        ):
             if g.model.type == "mlp_features" and sequence_on(g):
                 g.model.type = "seq_cross_encoder"  # type: ignore[assignment]
                 g.model.ensemble_members = []
@@ -256,7 +272,10 @@ def _change_interaction(g: Genotype, rng: np.random.Generator) -> None:
         g.interaction.fusion = _choice_other(
             rng, ["concat", "gated_sum", "cross_attention"], g.interaction.fusion
         )
-        if g.interaction.fusion == "cross_attention" and g.encoders.sequence.arch != "protein_lm":
+        if (
+            g.interaction.fusion == "cross_attention"
+            and g.encoders.sequence.arch != "protein_lm"
+        ):
             if g.model.type == "mlp_features" and sequence_on(g):
                 g.model.type = "seq_cross_encoder"  # type: ignore[assignment]
                 g.model.ensemble_members = []
@@ -268,37 +287,51 @@ def _compatible_heads(hidden_dim: int) -> list[int]:
 
 def _change_model(g: Genotype, rng: np.random.Generator) -> None:
     field = str(
-        rng.choice(["type", "hidden_dim", "num_layers", "num_heads", "dropout", "residual"])
+        rng.choice(
+            ["type", "hidden_dim", "num_layers", "num_heads", "dropout", "residual"]
+        )
     )
     m = g.model
     if field == "type":
         mods = sum((sequence_on(g), structure_on(g), surface_on(g)))
-        allowed = [t for t in (
-            "mlp_features",
-            "seq_dual_encoder",
-            "seq_cross_encoder",
-            "pdb_gnn",
-            "masif_siamese",
-            "masif_patch_cross_attn",
-            "multimodal_mlp",
-            "multimodal_gated",
-            "multimodal_cross_attn",
-            "ensemble",
-        ) if t != m.type]
+        allowed = [
+            t
+            for t in (
+                "mlp_features",
+                "seq_dual_encoder",
+                "seq_cross_encoder",
+                "pdb_gnn",
+                "masif_siamese",
+                "masif_patch_cross_attn",
+                "multimodal_mlp",
+                "multimodal_gated",
+                "multimodal_cross_attn",
+                "ensemble",
+            )
+            if t != m.type
+        ]
         if mods < 2:
             allowed = [t for t in allowed if t not in MULTIMODAL_TYPES]
         if not sequence_on(g):
-            allowed = [t for t in allowed if t not in {"seq_dual_encoder", "seq_cross_encoder"}]
+            allowed = [
+                t for t in allowed if t not in {"seq_dual_encoder", "seq_cross_encoder"}
+            ]
         if not structure_on(g):
             allowed = [t for t in allowed if t != "pdb_gnn"]
         if not surface_on(g):
-            allowed = [t for t in allowed if t not in {"masif_siamese", "masif_patch_cross_attn"}]
+            allowed = [
+                t
+                for t in allowed
+                if t not in {"masif_siamese", "masif_patch_cross_attn"}
+            ]
         if not allowed:
             return
         new_type = allowed[int(rng.integers(0, len(allowed)))]
         m.type = new_type  # type: ignore[assignment]
         if new_type == "ensemble":
-            a = ModelBody(type="mlp_features", hidden_dim=m.hidden_dim, num_heads=m.num_heads)
+            a = ModelBody(
+                type="mlp_features", hidden_dim=m.hidden_dim, num_heads=m.num_heads
+            )
             b_type = "seq_dual_encoder" if sequence_on(g) else "mlp_features"
             if b_type == "mlp_features":
                 b_type = "pdb_gnn" if structure_on(g) else "mlp_features"

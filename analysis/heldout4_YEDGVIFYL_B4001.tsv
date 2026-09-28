@@ -1,0 +1,11 @@
+pmhc	tool	one_to_one	deviation	n	n_pos	n_scored	pi	aucpr	auc01
+YEDGVIFYL–B*40:01	TITAN	yes		448	43	448	0.0960	0.1663	0.5455
+YEDGVIFYL–B*40:01	TEIM-Seq	yes		448	43	448	0.0960	0.1246	0.5145
+YEDGVIFYL–B*40:01	ATM-TCR	yes		448	43	448	0.0960	0.1193	0.5260
+YEDGVIFYL–B*40:01	TEPCAM	yes		448	43	448	0.0960	0.1127	0.4849
+YEDGVIFYL–B*40:01	SageTCR	no	Published residue input is SaProt with Foldseek 3Di. This run uses dummy 3Di token p and Boltz-2 PDBs instead of their chain-C (pMHC) / chain-D (TCR) complexes. Published rotate_perturbation.pt is used.	448	43	448	0.0960	0.1116	0.4902
+YEDGVIFYL–B*40:01	STAG-LLM	no	Original structures are TCRmodel2 (AlphaFold-Multimer TCR pipeline; chains D/E = TCR, A/C = pMHC). This run uses Boltz-2 PDBs with chain E (β2m) dropped. Published weights are used.	432	41	432	0.0949	0.1098	0.5014
+YEDGVIFYL–B*40:01	ERGO-II	yes		448	43	448	0.0960	0.1061	0.4856
+YEDGVIFYL–B*40:01	epiTCR	yes		448	43	448	0.0960	0.1025	0.5070
+YEDGVIFYL–B*40:01	TCRdock (−PAE)	no	Original score is −PAE from AlphaFold fine-tune (model_2_ptm_ft4 / tcrpmhc_run4). This run applies the same average to Boltz-2 PAE; AF weights were not used.	448	43	448	0.0960	0.0974	0.4935
+YEDGVIFYL–B*40:01	NetTCR-2.2	yes		448	43	448	0.0960	0.0713	0.4858

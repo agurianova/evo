@@ -14,11 +14,10 @@ all scored substantive mutations, not of archive elites.
 
 from __future__ import annotations
 
-import difflib
-import json
-import re
 from collections import Counter, defaultdict
+import json
 from pathlib import Path
+import re
 
 import numpy as np
 from scipy.stats import binomtest, fisher_exact
@@ -115,9 +114,7 @@ def load_run(name: str) -> list[dict]:
         d = json.loads(path.read_text())
         progs[d["id"]] = d
     seed_ids = {
-        d["id"]
-        for d in progs.values()
-        if not (d.get("lineage") or {}).get("parents")
+        d["id"] for d in progs.values() if not (d.get("lineage") or {}).get("parents")
     }
     champ = None
     for d in progs.values():
@@ -156,7 +153,15 @@ def load_run(name: str) -> list[dict]:
         fit = m.get("fitness")
         pfit = pm.get("fitness")
         child_ok = m.get("is_valid") == 1 and fit is not None and fit >= 0
-        parent_ok = pfit is not None and pfit >= 0 and (pm.get("is_valid") == 1 or parent in seed_ids or (parent and not (parent.get("lineage") or {}).get("parents")))
+        parent_ok = (
+            pfit is not None
+            and pfit >= 0
+            and (
+                pm.get("is_valid") == 1
+                or parent in seed_ids
+                or (parent and not (parent.get("lineage") or {}).get("parents"))
+            )
+        )
         # Seed may be valid. Parent invalid => delta undefined.
         parent_ok = pm.get("is_valid") == 1 and pfit is not None and pfit >= 0
         scored = bool(child_ok and parent_ok)
@@ -187,8 +192,12 @@ def load_run(name: str) -> list[dict]:
                 "shingles": shingles(toks),
                 "added": added,
                 "removed": removed,
-                "defs": sorted(set(DEF_RE.findall(added)) - set(DEF_RE.findall(removed))),
-                "classes": sorted(set(CLASS_RE.findall(added)) - set(CLASS_RE.findall(removed))),
+                "defs": sorted(
+                    set(DEF_RE.findall(added)) - set(DEF_RE.findall(removed))
+                ),
+                "classes": sorted(
+                    set(CLASS_RE.findall(added)) - set(CLASS_RE.findall(removed))
+                ),
                 "family": fam.group(1) if fam else "",
                 "model": md.get("mutation_model") or "",
             }
@@ -227,7 +236,9 @@ def bh_fdr(pvals: list[float]) -> list[float]:
     return out.tolist()
 
 
-def summarize_cluster(members: list[dict], sim: np.ndarray, index: dict[str, int]) -> dict:
+def summarize_cluster(
+    members: list[dict], sim: np.ndarray, index: dict[str, int]
+) -> dict:
     scored = [m for m in members if m["scored"]]
     gains = [m for m in scored if m["gain"]]
     clears = [m for m in scored if m["clear_gain"]]
@@ -366,7 +377,9 @@ def main() -> None:
     p0 = sum(r["gain"] for r in scored_sub) / len(scored_sub)
     p0_clear = sum(r["clear_gain"] for r in scored_sub) / len(scored_sub)
     mean0 = float(np.mean([r["delta"] for r in scored_sub]))
-    print(f"baseline gain_rate={p0:.3f} clear_rate(d>={CLEAR_DELTA})={p0_clear:.3f} mean_delta={mean0:.4f}")
+    print(
+        f"baseline gain_rate={p0:.3f} clear_rate(d>={CLEAR_DELTA})={p0_clear:.3f} mean_delta={mean0:.4f}"
+    )
 
     # Pairwise Jaccard on substantive edits only. Non-substantive edits are
     # too short for 5-gram identity to mean "the same mutation".
@@ -420,7 +433,9 @@ def main() -> None:
             )
         )
         payloads[str(thr)] = clusters
-        print(f"\n=== complete-linkage Jaccard>={thr} cross-run clusters: {len(clusters)} ===")
+        print(
+            f"\n=== complete-linkage Jaccard>={thr} cross-run clusters: {len(clusters)} ==="
+        )
         for c in clusters[:12]:
             print(
                 f"  runs={c['runs']} n={c['n_scored']}/{c['n']} "
@@ -440,12 +455,16 @@ def main() -> None:
                 [c["n_gain"], c["n_scored"] - c["n_gain"]],
                 [
                     sum(r["gain"] for r in scored_sub) - c["n_gain"],
-                    len(scored_sub) - c["n_scored"] - (sum(r["gain"] for r in scored_sub) - c["n_gain"]),
+                    len(scored_sub)
+                    - c["n_scored"]
+                    - (sum(r["gain"] for r in scored_sub) - c["n_gain"]),
                 ],
             ]
             # Guard if a cluster somehow includes every gain.
             odds, p_fisher = fisher_exact(table, alternative="greater")
-            p_binom = float(binomtest(c["n_gain"], c["n_scored"], p0, alternative="greater").pvalue)
+            p_binom = float(
+                binomtest(c["n_gain"], c["n_scored"], p0, alternative="greater").pvalue
+            )
             c["fisher_p"] = float(p_fisher)
             c["binom_p"] = p_binom
             c["fisher_odds"] = float(odds)
@@ -476,7 +495,11 @@ def main() -> None:
     print(f"\nPRIMARY clusters tested (3+ runs, 5+ scored): {len(tested)}")
     print(f"STRICT pass: {len(strict)}")
     for c in primary:
-        if c["n_scored_runs"] >= 2 and (c["gain_rate"] or 0) >= 0.5 and (c["n_scored"] or 0) >= 3:
+        if (
+            c["n_scored_runs"] >= 2
+            and (c["gain_rate"] or 0) >= 0.5
+            and (c["n_scored"] or 0) >= 3
+        ):
             print(
                 f"  candidate runs={c['runs']} gain={c['n_gain']}/{c['n_scored']} "
                 f"mean={c['mean_delta']:.4f} med={c['median_delta']:.4f} "
@@ -494,8 +517,18 @@ def main() -> None:
         pair_audit.append(
             {
                 "jaccard": float(val),
-                "a": {"run": a["run"], "id": a["short"], "delta": a["delta"], "added": a["added"][:500]},
-                "b": {"run": b["run"], "id": b["short"], "delta": b["delta"], "added": b["added"][:500]},
+                "a": {
+                    "run": a["run"],
+                    "id": a["short"],
+                    "delta": a["delta"],
+                    "added": a["added"][:500],
+                },
+                "b": {
+                    "run": b["run"],
+                    "id": b["short"],
+                    "delta": b["delta"],
+                    "added": b["added"][:500],
+                },
             }
         )
 
@@ -508,7 +541,9 @@ def main() -> None:
                 "run": run,
                 "n": len(rs),
                 "gain_rate": (sum(r["gain"] for r in rs) / len(rs)) if rs else None,
-                "clear_rate": (sum(r["clear_gain"] for r in rs) / len(rs)) if rs else None,
+                "clear_rate": (sum(r["clear_gain"] for r in rs) / len(rs))
+                if rs
+                else None,
                 "mean_delta": float(np.mean([r["delta"] for r in rs])) if rs else None,
             }
         )

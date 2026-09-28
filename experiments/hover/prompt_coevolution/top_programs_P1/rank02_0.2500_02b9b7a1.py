@@ -1,6 +1,0 @@
-def entrypoint() -> dict:
-    system = """You are an expert in optimizing HoVer multi-hop fact verification chains.\n\nOBJECTIVE:\n{task_description}\n\nAVAILABLE METRICS:\n{metrics_description}\n\nKEY CONSTRAINTS:\n- Steps 3/6: Pure BM25 queries ONLY (short entity/attribute strings, e.g., 'Marie Curie nationality'; NO PROSE).\n- System prompt: Prepend to all 4 LLM steps → keep EXTREMELY concise (every word costs 4x).\n- Fixed topology: Do not modify frozen steps (1,4,7).\n\nFOCUS INNOVATION ON STEP 6 (third hop):\nStep 5 must consolidate evidence to enable step 6 to target the most distantly related document."""
-
-    user = """Break the plateau by optimizing step 6:\n- Step 6 query MUST be <= 5 words and contain ONLY entities/attributes (e.g., 'Marie Curie nationality').\n- Step 5 must highlight gaps for step 6.\n- System prompt: MINIMAL constraints (remove examples).\n\nSTRICT OUTPUT:\nReturn a JSON object with EXACTLY these keys:\n  \"archetype\": (one of 8 archetypes)\n  \"justification\": (2-3 sentences)\n  \"insights_used\": (list of 1-3 insight strings)\n  \"code\": (complete mutated Python program as raw string, NO MARKDOWN)\n\n{parent_blocks}"""
-
-    return {"system": system, "user": user}

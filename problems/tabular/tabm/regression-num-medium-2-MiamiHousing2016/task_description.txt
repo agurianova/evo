@@ -1,4 +1,0 @@
-TASK — TABULAR REGRESSION (regression-num-medium-2-MiamiHousing2016)
-
-COLUMNS (assembled X[:, j], left to right)
-- [0-12]     numeric

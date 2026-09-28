@@ -1,0 +1,11 @@
+pmhc	tool	one_to_one	deviation	n	n_pos	n_scored	pi	aucpr	auc01
+ILMHATYFL–A*02:01	TEIM-Seq	yes		435	48	435	0.1103	0.1302	0.5070
+ILMHATYFL–A*02:01	ATM-TCR	yes		435	48	435	0.1103	0.1239	0.5102
+ILMHATYFL–A*02:01	TEPCAM	yes		435	48	435	0.1103	0.1197	0.5039
+ILMHATYFL–A*02:01	TCRdock (−PAE)	no	Original score is −PAE from AlphaFold fine-tune (model_2_ptm_ft4 / tcrpmhc_run4). This run applies the same average to Boltz-2 PAE; AF weights were not used.	435	48	435	0.1103	0.1167	0.4964
+ILMHATYFL–A*02:01	STAG-LLM	no	Original structures are TCRmodel2 (AlphaFold-Multimer TCR pipeline; chains D/E = TCR, A/C = pMHC). This run uses Boltz-2 PDBs with chain E (β2m) dropped. Published weights are used.	426	48	426	0.1127	0.1071	0.4817
+ILMHATYFL–A*02:01	NetTCR-2.2	yes		435	48	435	0.1103	0.1045	0.4925
+ILMHATYFL–A*02:01	epiTCR	yes		435	48	435	0.1103	0.0980	0.4844
+ILMHATYFL–A*02:01	ERGO-II	yes		435	48	435	0.1103	0.0974	0.4737
+ILMHATYFL–A*02:01	SageTCR	no	Published residue input is SaProt with Foldseek 3Di. This run uses dummy 3Di token p and Boltz-2 PDBs instead of their chain-C (pMHC) / chain-D (TCR) complexes. Published rotate_perturbation.pt is used.	435	48	435	0.1103	0.0940	0.4840
+ILMHATYFL–A*02:01	TITAN	yes		435	48	435	0.1103	0.0937	0.4737

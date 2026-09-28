@@ -46,8 +46,14 @@ def test_compressed_modality_mix_from_inputs_and_model_type():
         ("surface", dict(seq=False, pdb=False, masif=True, model="masif_siamese")),
         ("structure", dict(seq=True, pdb=True, masif=False, model="multimodal_mlp")),
         ("surface", dict(seq=True, pdb=False, masif=True, model="multimodal_gated")),
-        ("structure+surface", dict(seq=False, pdb=True, masif=True, model="multimodal_mlp")),
-        ("structure+surface", dict(seq=True, pdb=True, masif=True, model="multimodal_cross_attn")),
+        (
+            "structure+surface",
+            dict(seq=False, pdb=True, masif=True, model="multimodal_mlp"),
+        ),
+        (
+            "structure+surface",
+            dict(seq=True, pdb=True, masif=True, model="multimodal_cross_attn"),
+        ),
         ("structure", dict(seq=True, pdb=True, masif=False, model="pdb_gnn")),
         ("surface", dict(seq=True, pdb=False, masif=True, model="seq_dual_encoder")),
     ]
@@ -60,7 +66,9 @@ def test_compressed_modality_mix_from_inputs_and_model_type():
         g.inputs.masif.tcr_direct = spec["masif"]
         g.model.type = spec["model"]
         assert modality_mix_name(g) == name, (name, spec)
-        assert int(behavior_metrics(g)["modality_mix"]) == MODALITY_MIX_NAMES.index(name)
+        assert int(behavior_metrics(g)["modality_mix"]) == MODALITY_MIX_NAMES.index(
+            name
+        )
 
 
 def test_seq_dual_with_masif_maps_to_surface_cell():
@@ -71,7 +79,9 @@ def test_seq_dual_with_masif_maps_to_surface_cell():
     assert "sequence" in used_modalities(g)
     assert "surface" in used_modalities(g)
     assert modality_mix_name(g) == "surface"
-    assert int(behavior_metrics(g)["modality_mix"]) == MODALITY_MIX_NAMES.index("surface")
+    assert int(behavior_metrics(g)["modality_mix"]) == MODALITY_MIX_NAMES.index(
+        "surface"
+    )
 
 
 def test_interaction_kind_priority():
@@ -107,9 +117,9 @@ def test_interaction_kind_priority():
         g.interaction.method = spec["method"]
         g.interaction.fusion = spec["fusion"]
         assert interaction_kind_name(g) == name, spec
-        assert int(behavior_metrics(g)["interaction_kind"]) == INTERACTION_KIND_NAMES.index(
-            name
-        )
+        assert int(
+            behavior_metrics(g)["interaction_kind"]
+        ) == INTERACTION_KIND_NAMES.index(name)
 
 
 def test_se3_costs_more_than_gat_on_pdb_gnn():
@@ -169,7 +179,10 @@ def test_python_pmhc_tcr_interaction_from_source_families():
         "    def __init__(self):\n"
         "        self.interaction_family = 'global_concat'\n"
     )
-    assert PMHC_TCR_INTERACTION_NAMES[_pmhc_tcr_interaction_from_source(linear)] == "global_concat"
+    assert (
+        PMHC_TCR_INTERACTION_NAMES[_pmhc_tcr_interaction_from_source(linear)]
+        == "global_concat"
+    )
 
     patch = """
 class BindingPredictor:
@@ -190,7 +203,10 @@ class BindingPredictor:
     def forward(self, a, b):
         return torch.einsum('bd,bd->b', a, b)
 """
-    assert PMHC_TCR_INTERACTION_NAMES[_pmhc_tcr_interaction_from_source(bilinear)] == "bilinear_product"
+    assert (
+        PMHC_TCR_INTERACTION_NAMES[_pmhc_tcr_interaction_from_source(bilinear)]
+        == "bilinear_product"
+    )
 
     single = """
 class BindingPredictor:
@@ -323,13 +339,22 @@ def test_pmhctcr_python_patch_final_map_elites_preset():
             config_name="config",
             overrides=["experiment=pmhctcr_python_patch_final"],
         )
-        assert list(cfg.behavior_space["keys"]) == ["pmhc_tcr_interaction", "compute_tier"]
+        assert list(cfg.behavior_space["keys"]) == [
+            "pmhc_tcr_interaction",
+            "compute_tier",
+        ]
         assert cfg.islands[0].max_size == 36
         assert cfg.problem_context.expert_hypotheses_enabled is True
         space = instantiate(cfg.behavior_space)
         assert space.total_cells == 36
-        assert space.get_cell({"pmhc_tcr_interaction": 0.0, "compute_tier": 0.0}) == (0, 0)
-        assert space.get_cell({"pmhc_tcr_interaction": 5.0, "compute_tier": 5.0}) == (5, 5)
+        assert space.get_cell({"pmhc_tcr_interaction": 0.0, "compute_tier": 0.0}) == (
+            0,
+            0,
+        )
+        assert space.get_cell({"pmhc_tcr_interaction": 5.0, "compute_tier": 5.0}) == (
+            5,
+            5,
+        )
 
         cfg_off = compose(
             config_name="config",
@@ -343,7 +368,9 @@ def test_pmhctcr_python_patch_final_map_elites_preset():
 
 def test_pmhctcr_python_patch_map_elites_preset():
     with initialize_config_dir(config_dir=str(CONFIG_DIR), version_base=None):
-        cfg = compose(config_name="config", overrides=["experiment=pmhctcr_python_patch"])
+        cfg = compose(
+            config_name="config", overrides=["experiment=pmhctcr_python_patch"]
+        )
     assert list(cfg.behavior_space["keys"]) == ["arch_kind", "compute_tier"]
     assert cfg.islands[0].max_size == 24
     assert cfg.loader.pattern == "python_patch_seed.py"

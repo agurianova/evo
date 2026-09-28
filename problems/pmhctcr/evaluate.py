@@ -31,7 +31,9 @@ def _pmhc_scores(y_true: np.ndarray, y_score: np.ndarray) -> tuple[float, float]
     return aucpr, auc01
 
 
-def per_pmhc_metrics(rows: pd.DataFrame, scores: np.ndarray) -> dict[str, dict[str, float]]:
+def per_pmhc_metrics(
+    rows: pd.DataFrame, scores: np.ndarray
+) -> dict[str, dict[str, float]]:
     y = rows["label"].to_numpy(dtype=float)
     s = np.asarray(scores, dtype=float)
     if s.shape != (len(rows),):
@@ -54,7 +56,11 @@ def per_pmhc_metrics(rows: pd.DataFrame, scores: np.ndarray) -> dict[str, dict[s
 def aggregate(per: dict[str, dict[str, float]]) -> tuple[dict[str, float], dict]:
     auc01 = np.array([v["auc0.1"] for v in per.values()], dtype=float)
     aucpr = np.array([v["aucpr"] for v in per.values()], dtype=float)
-    if auc01.size == 0 or not np.all(np.isfinite(auc01)) or not np.all(np.isfinite(aucpr)):
+    if (
+        auc01.size == 0
+        or not np.all(np.isfinite(auc01))
+        or not np.all(np.isfinite(aucpr))
+    ):
         return dict(INVALID), {"per_pmhc": per, "reason": "non_finite_or_empty_macro"}
     n_scored = float(sum(v["n"] for v in per.values()))
     metrics = {

@@ -9,8 +9,8 @@ defaults:
   - _self_
 
 prompts:
-  dir: ${problem.dir}/prompts_python_patch_final_off
+  dir: ${problem.dir}/prompts_python_patch_final
 
 problem_context:
-  task_description_file: task_description_final_off.txt
+  task_description_file: task_description_final.txt
   expert_hypotheses_enabled: false

@@ -7,7 +7,12 @@ import pandas as pd
 import torch
 
 from problems.pmhctcr.compiler import describe_compiled
-from problems.pmhctcr.features import _molecule_vecs, _seq_block, _seq_channel_width, build_feature_matrix
+from problems.pmhctcr.features import (
+    _molecule_vecs,
+    _seq_block,
+    _seq_channel_width,
+    build_feature_matrix,
+)
 from problems.pmhctcr.genotype import default_genotype, uses_learned_sequence
 from problems.pmhctcr.nn_model import PmhctcrNet, _seq_max
 from problems.pmhctcr.operators import apply_operator
@@ -113,7 +118,9 @@ def test_multimodal_cross_attn_mha_runs_between_modalities():
     assert net.cross is not None
     assert net._extra_cross is False
     called = {"n": 0}
-    net.cross.register_forward_hook(lambda *a, **k: called.__setitem__("n", called["n"] + 1))
+    net.cross.register_forward_hook(
+        lambda *a, **k: called.__setitem__("n", called["n"] + 1)
+    )
     batch = _ids_batch(g)
     batch["tab"] = torch.randn(2, 24)
     batch["masif_cat"] = torch.randn(2, 160)

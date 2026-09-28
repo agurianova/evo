@@ -1,8 +1,8 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
-import pytest
 from langchain_core.messages import AIMessage
+import pytest
 
 from gigaevo.evolution.mutation.python_patch import (
     PythonPatchMutationOperator,
@@ -13,7 +13,6 @@ from gigaevo.evolution.mutation.python_patch import (
 from gigaevo.exceptions import MutationError
 from gigaevo.programs.program import Program
 from gigaevo.programs.program_state import ProgramState
-
 
 SOURCE = """\
 CONSTANT = 10
@@ -31,7 +30,11 @@ def entrypoint():
 def test_genome_applies_unique_patch_inside_editable_region():
     genome = PythonSourceGenome(SOURCE)
     child = genome.apply(
-        [SearchReplace("def score(x):\n    return x + 1\n", "def score(x):\n    return x * 2\n")]
+        [
+            SearchReplace(
+                "def score(x):\n    return x + 1\n", "def score(x):\n    return x * 2\n"
+            )
+        ]
     )
 
     assert "return x * 2" in child.source
@@ -80,7 +83,7 @@ def test_python_patch_seed_applies_bounded_code_edit():
         ]
     )
 
-    assert "name.startswith(\"tcr\")" in child.source
+    assert 'name.startswith("tcr")' in child.source
     assert "def entrypoint():" in child.source
 
 

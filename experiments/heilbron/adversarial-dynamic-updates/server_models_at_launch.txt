@@ -1,1 +1,0 @@
-http://10.232.30.185:4000/v1: ['Qwen/Qwen3-8B', 'Qwen3-235B-A22B-Thinking-2507']

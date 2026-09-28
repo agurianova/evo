@@ -1,4 +1,5 @@
 """pMHC-TCR child generated from a JSON genotype. Do not hand-edit."""
+
 from __future__ import annotations
 
 # EVOLVE-BLOCK-START genotype
@@ -13,6 +14,7 @@ GENOTYPE_JSON = '{\n  "calibration": {\n    "temperature": 1.0\n  },\n  "encoder
 # tabular: sequence; spots off
 # model.type: mlp_features  layers=2  hid=256
 # ignored: encoders.sequence.arch=transformer (bag-of-AA; no SeqEncoder until CHANGE_SEQUENCE cnn/transformer or CHANGE_MODEL seq_dual/seq_cross/multimodal)
+
 
 def entrypoint():
     try:

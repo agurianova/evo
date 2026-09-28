@@ -19,6 +19,7 @@ try:
     from problems.pmhctcr.features import build_feature_matrix, hard_negative_index
     from problems.pmhctcr.genotype import (
         Genotype,
+        cross_kind,
         loads,
         sequence_on,
         structure_on,
@@ -27,7 +28,6 @@ try:
         uses_learned_gat,
         uses_learned_sequence,
         uses_siamese,
-        cross_kind,
     )
     from problems.pmhctcr.nn_model import (
         TorchPredictor,
@@ -37,6 +37,7 @@ except ImportError:
     from features import build_feature_matrix, hard_negative_index
     from genotype import (
         Genotype,
+        cross_kind,
         loads,
         sequence_on,
         structure_on,
@@ -45,7 +46,6 @@ except ImportError:
         uses_learned_gat,
         uses_learned_sequence,
         uses_siamese,
-        cross_kind,
     )
     from nn_model import (
         TorchPredictor,
@@ -99,7 +99,10 @@ class CompiledPredictor:
         self._prior = 0.1
         self._fitted = False
         self._members: list[Any] = []
-        if genotype.model.type == "ensemble" and len(genotype.model.ensemble_members) >= 2:
+        if (
+            genotype.model.type == "ensemble"
+            and len(genotype.model.ensemble_members) >= 2
+        ):
             for member in genotype.model.ensemble_members:
                 sub = genotype.model_copy(deep=True)
                 sub.model.type = member.type  # type: ignore[assignment]
@@ -195,7 +198,9 @@ def describe_compiled(payload: Genotype | dict[str, Any] | str) -> dict[str, Any
             f"training.loss={g.training.loss} is 0.1× aux; primary train signal is within-pMHC rank"
         )
     if not torch_head:
-        ignored.append("model.dropout / residual / optimizer / scheduler (sklearn logistic path)")
+        ignored.append(
+            "model.dropout / residual / optimizer / scheduler (sklearn logistic path)"
+        )
     return {
         "head": "torch" if torch_head else "sklearn",
         "learned_sequence": learned_seq,
@@ -211,7 +216,9 @@ def describe_compiled(payload: Genotype | dict[str, Any] | str) -> dict[str, Any
     }
 
 
-def compile_genotype(payload: Genotype | dict[str, Any] | str) -> CompiledPredictor | TorchPredictor:
+def compile_genotype(
+    payload: Genotype | dict[str, Any] | str,
+) -> CompiledPredictor | TorchPredictor:
     g = _coerce_genotype(payload)
     if g.model.type == "ensemble" and len(g.model.ensemble_members) >= 2:
         return CompiledPredictor(g)

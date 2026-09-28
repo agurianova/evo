@@ -19,6 +19,17 @@ def _load(name: str, path: Path):
 
 
 def test_cdr3_logistic_validate_and_test_are_disjoint():
+    from problems.pmhctcr.dataset import data_root
+
+    asset_root = data_root()
+    required = (
+        PROBLEM_DIR / "tables" / "samples.parquet",
+        asset_root / "pdb",
+        asset_root / "masif",
+        asset_root / "esm2_t6_8M_UR50D",
+    )
+    if not all(path.exists() for path in required):
+        pytest.skip("ImmRep25 tables and feature assets are provided separately")
     sys.path.insert(0, str(PROBLEM_DIR))
     seed = _load("_pmhctcr_cdr3", PROBLEM_DIR / "initial_programs" / "cdr3_logistic.py")
     validator = _load("_pmhctcr_validate", PROBLEM_DIR / "validate.py")
@@ -66,8 +77,11 @@ def test_macro_is_unweighted_mean_across_pmhc():
     metrics, artifact = evaluate.score_fold(rows, scores)
     per = artifact["per_pmhc"]
     assert metrics["is_valid"] == 1.0
-    assert metrics["fitness"] == pytest.approx(0.5 * (per["pmhc_a"]["aucpr"] + per["pmhc_b"]["aucpr"]))
+    assert metrics["fitness"] == pytest.approx(
+        0.5 * (per["pmhc_a"]["aucpr"] + per["pmhc_b"]["aucpr"])
+    )
     assert metrics["mean_aucpr"] == pytest.approx(metrics["fitness"])
-    assert metrics["mean_auc01"] == pytest.approx(0.5 * (per["pmhc_a"]["auc0.1"] + per["pmhc_b"]["auc0.1"]))
+    assert metrics["mean_auc01"] == pytest.approx(
+        0.5 * (per["pmhc_a"]["auc0.1"] + per["pmhc_b"]["auc0.1"])
+    )
     assert metrics["n_pmhc"] == 2.0
-

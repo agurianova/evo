@@ -31,7 +31,9 @@ def _features(df: pd.DataFrame) -> np.ndarray:
 
 class Cdr3Logistic:
     def __init__(self):
-        self.model = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=0)
+        self.model = LogisticRegression(
+            max_iter=1000, class_weight="balanced", random_state=0
+        )
 
     def fit(self, train_df: pd.DataFrame) -> None:
         x = _features(train_df)

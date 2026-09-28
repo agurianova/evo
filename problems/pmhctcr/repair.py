@@ -5,8 +5,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 from problems.pmhctcr.genotype import (
-    Genotype,
     MULTIMODAL_TYPES,
+    Genotype,
     allowed_sequence_regions,
     n_active_inputs,
     pair_ok,
@@ -33,7 +33,15 @@ def integrity_errors(g: Genotype) -> list[str]:
             errors.append("empty pairs require method=fusion=null")
     if g.encoders.structure.scope == "interface" and g.inputs.pdb.kind != "complex":
         errors.append("interface scope requires pdb.kind=complex")
-    mods = {m for m, on in (("sequence", sequence_on(g)), ("structure", structure_on(g)), ("surface", surface_on(g))) if on}
+    mods = {
+        m
+        for m, on in (
+            ("sequence", sequence_on(g)),
+            ("structure", structure_on(g)),
+            ("surface", surface_on(g)),
+        )
+        if on
+    }
     if g.model.type in MULTIMODAL_TYPES and len(mods) < 2:
         errors.append("multimodal model needs >=2 modalities")
     if g.model.type == "ensemble":
@@ -103,7 +111,9 @@ def repair(g: Genotype) -> Genotype:
             surface_on(out),
         )
     )
-    if out.model.type in {"seq_dual_encoder", "seq_cross_encoder"} and not sequence_on(out):
+    if out.model.type in {"seq_dual_encoder", "seq_cross_encoder"} and not sequence_on(
+        out
+    ):
         out.model.type = "mlp_features"
         out.model.ensemble_members = []
     if (
@@ -120,7 +130,9 @@ def repair(g: Genotype) -> Genotype:
     if out.model.type == "pdb_gnn" and not structure_on(out):
         out.model.type = "mlp_features"
         out.model.ensemble_members = []
-    if out.model.type in {"masif_siamese", "masif_patch_cross_attn"} and not surface_on(out):
+    if out.model.type in {"masif_siamese", "masif_patch_cross_attn"} and not surface_on(
+        out
+    ):
         out.model.type = "mlp_features"
         out.model.ensemble_members = []
     if out.model.type in MULTIMODAL_TYPES and mods < 2:
@@ -155,8 +167,13 @@ def repair(g: Genotype) -> Genotype:
     if not surface_on(out):
         out.encoders.surface.spots.enabled = False
     if len(out.encoders.surface.spots.derived) > 8:
-        out.encoders.surface.spots.derived = list(out.encoders.surface.spots.derived[:8])
-    if out.encoders.surface.spots.metric == "cosine" and out.encoders.surface.spots.threshold >= 1.0:
+        out.encoders.surface.spots.derived = list(
+            out.encoders.surface.spots.derived[:8]
+        )
+    if (
+        out.encoders.surface.spots.metric == "cosine"
+        and out.encoders.surface.spots.threshold >= 1.0
+    ):
         out.encoders.surface.spots.threshold = 0.5
     return out
 

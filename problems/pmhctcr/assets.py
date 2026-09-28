@@ -61,11 +61,15 @@ class PdbAsset:
     ok: bool
 
 
-def _subsample(desc: np.ndarray, xyz: np.ndarray, n: int = _N_PATCH) -> tuple[np.ndarray, np.ndarray]:
+def _subsample(
+    desc: np.ndarray, xyz: np.ndarray, n: int = _N_PATCH
+) -> tuple[np.ndarray, np.ndarray]:
     if desc.shape[0] <= n:
         return desc.astype(np.float32, copy=False), xyz.astype(np.float32, copy=False)
     idx = np.linspace(0, desc.shape[0] - 1, n).astype(np.int64)
-    return desc[idx].astype(np.float32, copy=False), xyz[idx].astype(np.float32, copy=False)
+    return desc[idx].astype(np.float32, copy=False), xyz[idx].astype(
+        np.float32, copy=False
+    )
 
 
 def _zeros_masif() -> MasifAsset:
@@ -91,9 +95,15 @@ def load_masif(tcr_path: str, pmhc_path: str) -> MasifAsset:
             # Direct/straight view — do not use desc_flipped on the TCR file.
             key = "desc_straight" if "desc_straight" in z.files else "desc"
             desc = np.asarray(z[key], dtype=np.float32)
-            xyz = np.asarray(z["xyz"], dtype=np.float32) if "xyz" in z.files else np.zeros((len(desc), 3), np.float32)
+            xyz = (
+                np.asarray(z["xyz"], dtype=np.float32)
+                if "xyz" in z.files
+                else np.zeros((len(desc), 3), np.float32)
+            )
             if "pooled" in z.files:
-                tcr_pooled = np.asarray(z["pooled"], dtype=np.float32).reshape(-1)[:_MASIF_DIM]
+                tcr_pooled = np.asarray(z["pooled"], dtype=np.float32).reshape(-1)[
+                    :_MASIF_DIM
+                ]
             else:
                 tcr_pooled = desc.mean(axis=0)
             tcr_desc, tcr_xyz = _subsample(desc, xyz)
@@ -103,9 +113,15 @@ def load_masif(tcr_path: str, pmhc_path: str) -> MasifAsset:
             # Flipped view — do not use desc_straight on the pMHC file.
             key = "desc_flipped" if "desc_flipped" in z.files else "desc"
             desc = np.asarray(z[key], dtype=np.float32)
-            xyz = np.asarray(z["xyz"], dtype=np.float32) if "xyz" in z.files else np.zeros((len(desc), 3), np.float32)
+            xyz = (
+                np.asarray(z["xyz"], dtype=np.float32)
+                if "xyz" in z.files
+                else np.zeros((len(desc), 3), np.float32)
+            )
             if "pooled" in z.files:
-                pmhc_pooled = np.asarray(z["pooled"], dtype=np.float32).reshape(-1)[:_MASIF_DIM]
+                pmhc_pooled = np.asarray(z["pooled"], dtype=np.float32).reshape(-1)[
+                    :_MASIF_DIM
+                ]
             else:
                 pmhc_pooled = desc.mean(axis=0)
             pmhc_desc, pmhc_xyz = _subsample(desc, xyz)
@@ -199,7 +215,12 @@ def load_esm(path: str) -> EsmAsset:
     """Load one cached ESM-2 vector. Missing file → zeros."""
     p = Path(path)
     if not p.is_file():
-        return EsmAsset(_ESM_ZERO.copy(), _ESM_ZERO.copy(), np.zeros((1, ESM2_HIDDEN), np.float32), False)
+        return EsmAsset(
+            _ESM_ZERO.copy(),
+            _ESM_ZERO.copy(),
+            np.zeros((1, ESM2_HIDDEN), np.float32),
+            False,
+        )
     with np.load(p, allow_pickle=False) as z:
         pooled = np.asarray(z["pooled"], dtype=np.float32).reshape(-1)[:ESM2_HIDDEN]
         cls = np.asarray(z["cls"], dtype=np.float32).reshape(-1)[:ESM2_HIDDEN]

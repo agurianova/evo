@@ -1,4 +1,0 @@
-Label: C2_G
-DB: 7
-Gen: 4
-Best fitness: 0.99541

@@ -13,11 +13,11 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.colors import to_rgb
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle
+import matplotlib.pyplot as plt
+import numpy as np
 
 OUT = Path(__file__).resolve().parent / "injection_gen2_delta.png"
 
@@ -74,28 +74,42 @@ def add_tick(ax, x: float, y: float, face: str) -> None:
     from matplotlib.transforms import ScaledTranslation
 
     trans = ax.figure.dpi_scale_trans + ScaledTranslation(x, y, ax.transData)
-    ax.add_patch(Circle(
-        (0, 0), (DOT / 2) / 72.0, facecolor=face, edgecolor=EDGE, linewidth=0.55,
-        transform=trans, zorder=4,
-    ))
+    ax.add_patch(
+        Circle(
+            (0, 0),
+            (DOT / 2) / 72.0,
+            facecolor=face,
+            edgecolor=EDGE,
+            linewidth=0.55,
+            transform=trans,
+            zorder=4,
+        )
+    )
 
 
 def add_link(ax, left: float, right: float, y: float) -> None:
     lo, hi = (left, right) if left <= right else (right, left)
     ax.plot(
-        [lo, hi], [y, y], color=LINK, lw=0.35, linestyle=(0, (0.8, 0.9)),
-        solid_capstyle="butt", zorder=2,
+        [lo, hi],
+        [y, y],
+        color=LINK,
+        lw=0.35,
+        linestyle=(0, (0.8, 0.9)),
+        solid_capstyle="butt",
+        zorder=2,
     )
 
 
 def main() -> None:
-    plt.rcParams.update({
-        "font.family": "DejaVu Sans",
-        "font.size": 6.5,
-        "axes.unicode_minus": False,
-        "pdf.fonttype": 42,
-        "ps.fonttype": 42,
-    })
+    plt.rcParams.update(
+        {
+            "font.family": "DejaVu Sans",
+            "font.size": 6.5,
+            "axes.unicode_minus": False,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+        }
+    )
 
     # Quarter the previous area: each side is half of 8.6 x 5.25.
     fig = plt.figure(figsize=(4.3, 2.62), dpi=220, facecolor="white")
@@ -118,22 +132,40 @@ def main() -> None:
             add_tick(ax, alone, y, KQV)
         else:
             ax.plot(
-                [0.985], [y], marker="x", color=EDGE, ms=4.2, mew=0.8,
-                transform=ax.get_yaxis_transform(), clip_on=False, zorder=5,
+                [0.985],
+                [y],
+                marker="x",
+                color=EDGE,
+                ms=4.2,
+                mew=0.8,
+                transform=ax.get_yaxis_transform(),
+                clip_on=False,
+                zorder=5,
             )
         add_tick(ax, surface, y, SURFACE)
     ax.text(
-        xmax - 0.001, n - 0.55, "выше голой",
-        ha="right", va="top", color=GAIN, fontsize=5.5, zorder=5,
+        xmax - 0.001,
+        n - 0.55,
+        "выше голой",
+        ha="right",
+        va="top",
+        color=GAIN,
+        fontsize=5.5,
+        zorder=5,
     )
 
     ax.set_yticks(ys)
     ax.set_yticklabels(
-        [row[0] for row in ROWS], fontfamily="DejaVu Sans Mono", fontsize=5.4, color=INK,
+        [row[0] for row in ROWS],
+        fontfamily="DejaVu Sans Mono",
+        fontsize=5.4,
+        color=INK,
     )
     ax.set_xlabel(
         "Δ macro AUC-PR на тесте относительно голой программы",
-        color=INK, fontsize=6, labelpad=2,
+        color=INK,
+        fontsize=6,
+        labelpad=2,
     )
     ax.set_xticks([-0.04, -0.02, 0, 0.02, 0.04])
     ax.tick_params(axis="x", colors=INK, length=2.2, width=0.5, labelsize=5.4, pad=1)
@@ -146,29 +178,58 @@ def main() -> None:
     ax.set_axisbelow(False)
 
     h1 = Line2D(
-        [0], [0], marker="o", color="none", markerfacecolor=SURFACE,
-        markeredgecolor=EDGE, markeredgewidth=0.55, markersize=DOT, label="H1",
+        [0],
+        [0],
+        marker="o",
+        color="none",
+        markerfacecolor=SURFACE,
+        markeredgecolor=EDGE,
+        markeredgewidth=0.55,
+        markersize=DOT,
+        label="H1",
     )
     alone = Line2D(
-        [0], [0], marker="o", color="none", markerfacecolor=KQV,
-        markeredgecolor=EDGE, markeredgewidth=0.55, markersize=DOT, label="A",
+        [0],
+        [0],
+        marker="o",
+        color="none",
+        markerfacecolor=KQV,
+        markeredgecolor=EDGE,
+        markeredgewidth=0.55,
+        markersize=DOT,
+        label="A",
     )
     leg = fig.legend(
-        handles=[h1, alone], frameon=False, loc="lower left",
-        bbox_to_anchor=(0.62, 0.90), ncol=2, fontsize=6,
-        handletextpad=0.25, columnspacing=0.7, borderaxespad=0,
+        handles=[h1, alone],
+        frameon=False,
+        loc="lower left",
+        bbox_to_anchor=(0.62, 0.90),
+        ncol=2,
+        fontsize=6,
+        handletextpad=0.25,
+        columnspacing=0.7,
+        borderaxespad=0,
     )
     for text in leg.get_texts():
         text.set_color(INK)
 
     fig.text(
-        0.24, 0.955, "Инъекции в первые различающиеся программы",
-        color=INK, fontsize=7.5, ha="left", va="center",
+        0.24,
+        0.955,
+        "Инъекции в первые различающиеся программы",
+        color=INK,
+        fontsize=7.5,
+        ha="left",
+        va="center",
     )
     fig.text(
-        0.24, 0.045,
+        0.24,
+        0.045,
         "Медиана Δ: H1 +0.0052 (6 из 7), A −0.0046 (0 из 6).  r4 52c245fc: A без метрики.",
-        color=MUTED, fontsize=4.8, ha="left", va="center",
+        color=MUTED,
+        fontsize=4.8,
+        ha="left",
+        va="center",
     )
 
     fig.savefig(OUT, dpi=220, facecolor="white")

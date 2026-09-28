@@ -46,13 +46,17 @@ def test_derived_ratio_appended():
     vec = spot_feature_vector(g, asset, row)
     assert vec.shape[0] == len(SPOT_CORE) + 1
     core = core_spot_features(g, asset, row)
-    expected = core["cdr3_frac"] / (core["area_frac"] if abs(core["area_frac"]) > 1e-8 else 1e-8)
+    expected = core["cdr3_frac"] / (
+        core["area_frac"] if abs(core["area_frac"]) > 1e-8 else 1e-8
+    )
     assert abs(vec[-1] - expected) < 1e-6
 
 
 def test_spots_change_scores_vs_pooled_masif():
     train, val = _mini()
-    pooled = apply_operator(default_genotype(), "CREATE_SURFACE", rng=np.random.default_rng(0))
+    pooled = apply_operator(
+        default_genotype(), "CREATE_SURFACE", rng=np.random.default_rng(0)
+    )
     spots = apply_operator(pooled, "CHANGE_SURFACE", rng=np.random.default_rng(1))
     assert pooled.encoders.surface.spots.enabled is False
     assert spots.encoders.surface.spots.enabled is True

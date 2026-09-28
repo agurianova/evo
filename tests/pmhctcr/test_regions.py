@@ -13,7 +13,9 @@ from problems.pmhctcr.regions import (
 
 def test_cdr3_and_cdr1_are_substrings_of_full_chain():
     tcr = load_folds()["train"].iloc[0]
-    parts = split_chain(str(tcr["tcra_seq"]), str(tcr["tcra_seq_cdr3"]), str(tcr["tcra_vgene"]))
+    parts = split_chain(
+        str(tcr["tcra_seq"]), str(tcr["tcra_seq_cdr3"]), str(tcr["tcra_vgene"])
+    )
     assert parts["cdr3"] == tcr["tcra_seq_cdr3"]
     assert parts["cdr3"] in parts["full"]
     assert parts["cdr1"]
@@ -28,7 +30,9 @@ def test_cdr3_and_cdr1_are_substrings_of_full_chain():
 def test_imgt_germline_loops_match_named_v_alleles():
     tcr = load_folds()["train"].drop_duplicates("tcr_id")
     row = tcr[tcr["tcra_vgene"] == "TRAV1-1*01"].iloc[0]
-    parts = split_chain(str(row["tcra_seq"]), str(row["tcra_seq_cdr3"]), str(row["tcra_vgene"]))
+    parts = split_chain(
+        str(row["tcra_seq"]), str(row["tcra_seq_cdr3"]), str(row["tcra_vgene"])
+    )
     assert parts["cdr1"] == "TSGFYG"
     assert parts["cdr2"] == "NALDGL"
     assert "W" not in parts["cdr1"]
@@ -38,7 +42,10 @@ def test_imgt_germline_loops_match_named_v_alleles():
     from problems.pmhctcr.regions import region_indices
 
     idx = region_indices(
-        str(row["tcra_seq"]), "cdr1", cdr3=str(row["tcra_seq_cdr3"]), vgene=str(row["tcra_vgene"])
+        str(row["tcra_seq"]),
+        "cdr1",
+        cdr3=str(row["tcra_seq_cdr3"]),
+        vgene=str(row["tcra_vgene"]),
     )
     extracted = "".join(str(row["tcra_seq"])[i] for i in idx)
     assert extracted == "TSGFYG"

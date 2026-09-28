@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import ast
-import random
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
+import random
+import re
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -82,9 +82,7 @@ class PythonSourceGenome:
                 raise MutationError(f"EVOLVE block {name!r} ends without a start")
             open_name, content_start = open_region
             if name != open_name:
-                raise MutationError(
-                    f"EVOLVE block {open_name!r} closed as {name!r}"
-                )
+                raise MutationError(f"EVOLVE block {open_name!r} closed as {name!r}")
             regions.append(
                 EditableRegion(name=name, start=content_start, end=marker.start())
             )
@@ -118,7 +116,7 @@ class PythonSourceGenome:
         chunks = []
         for region in self.regions:
             chunks.append(
-                f"### {region.name}\n{self.source[region.start:region.end].strip()}"
+                f"### {region.name}\n{self.source[region.start : region.end].strip()}"
             )
         return "\n\n".join(chunks)
 
@@ -133,12 +131,9 @@ class PythonSourceGenome:
             if "EVOLVE-BLOCK-" in patch.replace:
                 raise MutationError(f"Patch {index} attempts to alter EVOLVE markers")
 
-            current = PythonSourceGenome(
-                source, entry_function=self.entry_function
-            )
+            current = PythonSourceGenome(source, entry_function=self.entry_function)
             occurrences = [
-                match.start()
-                for match in re.finditer(re.escape(patch.search), source)
+                match.start() for match in re.finditer(re.escape(patch.search), source)
             ]
             if len(occurrences) != 1:
                 raise MutationError(
@@ -151,9 +146,7 @@ class PythonSourceGenome:
                 region.start <= start and end <= region.end
                 for region in current.regions
             ):
-                raise MutationError(
-                    f"Patch {index} SEARCH is outside an EVOLVE block"
-                )
+                raise MutationError(f"Patch {index} SEARCH is outside an EVOLVE block")
             source = source[:start] + patch.replace + source[end:]
 
         return PythonSourceGenome(source, entry_function=self.entry_function)
@@ -219,9 +212,7 @@ class PythonPatchMutationOperator(MutationOperator):
         compatible = []
         for program in candidates:
             try:
-                PythonSourceGenome(
-                    program.code, entry_function=self.entry_function
-                )
+                PythonSourceGenome(program.code, entry_function=self.entry_function)
             except MutationError:
                 continue
             compatible.append(program)
@@ -293,9 +284,7 @@ insights:
                 "inspirations are selected separately from storage"
             )
         parent = selected_parents[0]
-        genome = PythonSourceGenome(
-            parent.code, entry_function=self.entry_function
-        )
+        genome = PythonSourceGenome(parent.code, entry_function=self.entry_function)
         inspirations = await self._select_inspirations(parent)
         response = await self.llm_wrapper.ainvoke(
             self._build_prompt(parent, inspirations)
@@ -316,9 +305,7 @@ insights:
             "editable_regions": [region.name for region in child.regions],
             MutationSpec.META_OUTPUT: {
                 "base_parent": 1,
-                "inspiration_program_ids": [
-                    program.id for program in inspirations
-                ],
+                "inspiration_program_ids": [program.id for program in inspirations],
             },
         }
         if model_name:

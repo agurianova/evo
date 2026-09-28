@@ -1,7 +1,0 @@
-http://10.225.185.235:8001/v1: ['Qwen/Qwen3-8B']
-http://10.225.51.251:8777/v1: ['Qwen3-235B-A22B-Thinking-2507']
-http://10.226.15.38:8777/v1: ['Qwen3-235B-A22B-Thinking-2507']
-http://10.226.17.25:8000/v1: ['Qwen/Qwen3-8B']
-http://10.226.17.25:8001/v1: ['Qwen/Qwen3-8B']
-http://10.226.185.47:8777/v1: ['Qwen3-235B-A22B-Thinking-2507']
-http://10.226.72.211:8777/v1: ['Qwen3-235B-A22B-Thinking-2507']

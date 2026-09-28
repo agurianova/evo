@@ -1,0 +1,15 @@
+Method	Class	Macro AUCPR ± SD ↑	Worst-case AUCPR ↑	Macro AUC0.1 ± SD ↑	Worst-case AUC0.1 ↑
+Expert on run 1	LLM-evolved program	0.194 ± 0.150	0.093	0.552 ± 0.090	0.480
+Expert on run 2	LLM-evolved program	0.133 ± 0.070	0.087	0.498 ± 0.031	0.474
+Expert on run 3	LLM-evolved program	0.110 ± 0.017	0.093	0.502 ± 0.021	0.482
+Expert on run 4	LLM-evolved program	0.103 ± 0.016	0.087	0.498 ± 0.017	0.484
+Expert on run 5	LLM-evolved program	0.125 ± 0.040	0.085	0.516 ± 0.038	0.475
+NetTCR-2.2 (official pan)	Sequence CNN	0.092 ± 0.015	0.071	0.488 ± 0.003	0.484
+ATM-TCR (official)	Sequence attention (CDR3β+pep)	0.123 ± 0.011	0.109	0.514 ± 0.015	0.491
+TEIM-Seq (official)	Sequence CNN (CDR3β+pep)	0.129 ± 0.011	0.115	0.507 ± 0.009	0.492
+TEPCAM (official)	Sequence cross-attention (CDR3β+pep)	0.108 ± 0.017	0.079	0.489 ± 0.011	0.474
+epiTCR (official)	Random forest (CDR3β+pep)	0.108 ± 0.015	0.098	0.503 ± 0.018	0.484
+ERGO-II (official VDJdb)	Sequence AE+LSTM (CDR3αβ+VJ+MHC)	0.100 ± 0.004	0.096	0.491 ± 0.014	0.474
+TITAN (official)	Sequence bimodal attention (full TRB+pep SMILES)	0.112 ± 0.033	0.080	0.498 ± 0.029	0.474
+STAG-LLM	Structure-aware LLM (published weights)	0.110 ± 0.002	0.107	0.500 ± 0.013	0.482
+SageTCR	Structure model (published weights)	0.108 ± 0.011	0.094	0.494 ± 0.007	0.484

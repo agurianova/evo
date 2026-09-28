@@ -141,24 +141,26 @@ def test_mutate_single_falls_back_to_scheduler_without_insights():
     assert child.meta.operator_applied is not None
 
 
-def test_mutation_suggestions_prompt_asks_for_one_operator_step():
+def test_mutation_suggestions_prompt_asks_for_one_python_patch_step():
     prompts_dir = (
-        Path(__file__).resolve().parents[2] / "problems" / "pmhctcr" / "prompts"
+        Path(__file__).resolve().parents[2]
+        / "problems"
+        / "pmhctcr"
+        / "prompts_python_patch_final"
     )
     text = load_prompt("mutation_suggestions", "system", prompts_dir=prompts_dir)
-    assert "one most important next step" in text
-    assert "OPERATOR=<ID>" in text
-    assert "GENOTYPE_JSON" in text
-    assert "CREATE_SURFACE" in text
-    assert "CHANGE_SURFACE" in text
-    assert "turns MaSIF on" in text
+    assert "exactly one" in text.lower() and "insight" in text.lower()
+    assert "EVOLVE-BLOCK" in text
+    assert "{expert_hypotheses}" in text
+    assert "SEARCH/REPLACE" in text
     filled = MutationSuggestionsPrompts.system(prompts_dir=prompts_dir).format(
         task_description="task",
         metrics_description="metrics",
-        max_insights=1,
+        expert_hypotheses="H1 surface complementarity",
     )
-    assert "list of length 1" in filled
-    assert "{max_insights}" not in filled
+    assert "H1 surface complementarity" in filled
+    assert "{task_description}" not in filled
+    assert "{expert_hypotheses}" not in filled
 
 
 def test_guided_create_surface_when_already_on_is_rejected():
@@ -285,7 +287,9 @@ def test_mutate_single_spent_insight_does_not_return_none_thirty_two_times():
     assert loads_program(specs[0].code).meta.operator_applied == "CREATE_SURFACE"
     empties = sum(1 for spec in specs if spec is None)
     assert empties < 32
-    assert any(spec is not None and not spec.metadata["pmhctcr_guided"] for spec in specs[1:])
+    assert any(
+        spec is not None and not spec.metadata["pmhctcr_guided"] for spec in specs[1:]
+    )
 
 
 def test_guided_training_sets_lr_not_a_random_loss():

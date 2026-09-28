@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Factorial test injection: reciprocal MaSIF _surface and KQV _FusionModel.
+"""Factorial test injection on the seven frozen generation-2 hosts.
 
-Hosts are the best validation-fitness valid program in each expert-on run
-whose source has neither the hypothesis-1 surface code nor a per-state
-key/value ModuleList. Donors are frozen: r1 3f46e909 _surface, r4 0fb367bd
-_FusionModel. The donor child's entropy term in fit() is not copied.
-
-Outcome is score_on_test (train fit, four held-out pMHCs).
+Donors are fixed: r1 3f46e909 _surface, r4 0fb367bd _FusionModel.
+The donor child's entropy term in fit() is not copied. Outcomes use
+score_on_test (train fit, four held-out pMHCs).
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
+import sys
+import tarfile
+
+import torch
 
 REPO = Path(__file__).resolve().parents[2]
 PROBLEM = REPO / "problems" / "pmhctcr"
@@ -24,20 +24,20 @@ sys.path.insert(0, str(PROBLEM))
 os.environ.setdefault("OMP_NUM_THREADS", "8")
 os.environ.setdefault("MKL_NUM_THREADS", "8")
 
-import torch
-
 torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "8")))
 
 from codegen import exec_program  # noqa: E402
 from validate import score_on_test  # noqa: E402
 
-HOSTS = {
-    1: "670ad858",
-    2: "7ca40b08",
-    3: "4bbbc6d2",
-    4: "25a6f29b",
-    5: "7c53ab83",
-}
+GEN2_HOSTS = (
+    (2, "275ae460"),
+    (4, "4996f5b6"),
+    (4, "52c245fc"),
+    (4, "8777238d"),
+    (4, "c840f89c"),
+    (5, "773338c2"),
+    (5, "c8991aef"),
+)
 SURFACE_DONOR = (1, "3f46e909")
 KQV_DONOR = (4, "0fb367bd")
 OUT = REPO / "outputs" / "_analysis" / "injection_factorial"
@@ -54,9 +54,21 @@ def program_code(run: int, prefix: str) -> str:
         / "programs"
     )
     hits = list(storage.glob(f"{prefix}*.json"))
-    if len(hits) != 1:
-        raise FileNotFoundError(f"r{run} {prefix}: {len(hits)} files")
-    return json.loads(hits[0].read_text())["code"]
+    if len(hits) == 1:
+        return json.loads(hits[0].read_text())["code"]
+    archive = REPO / "artifacts" / f"expert_on_r{run}.tar.gz"
+    if archive.is_file():
+        with tarfile.open(archive, "r:gz") as bundle:
+            names = [
+                name
+                for name in bundle.getnames()
+                if name.startswith(f"programs/{prefix}") and name.endswith(".json")
+            ]
+            if len(names) == 1:
+                member = bundle.extractfile(names[0])
+                assert member is not None
+                return json.loads(member.read())["code"]
+    raise FileNotFoundError(f"r{run} {prefix}: {len(hits)} local files")
 
 
 def block(src: str, start: str) -> str:
@@ -109,12 +121,26 @@ def evaluate(source: str) -> dict:
     reason = artifact.get("reason")
     per = artifact.get("per_pmhc") or {}
     return {
-        "metrics": {k: metrics.get(k) for k in (
-            "fitness", "is_valid", "mean_aucpr", "mean_auc01", "min_aucpr", "min_auc01", "n_pmhc"
-        )},
+        "metrics": {
+            k: metrics.get(k)
+            for k in (
+                "fitness",
+                "is_valid",
+                "mean_aucpr",
+                "mean_auc01",
+                "min_aucpr",
+                "min_auc01",
+                "n_pmhc",
+            )
+        },
         "reason": reason,
         "per_pmhc": {
-            k: {"aucpr": v.get("aucpr"), "auc0.1": v.get("auc0.1"), "n": v.get("n"), "n_pos": v.get("n_pos")}
+            k: {
+                "aucpr": v.get("aucpr"),
+                "auc0.1": v.get("auc0.1"),
+                "n": v.get("n"),
+                "n_pos": v.get("n_pos"),
+            }
             for k, v in per.items()
         },
     }
@@ -135,15 +161,26 @@ def main() -> None:
     (OUT / "donor_kqv.py").write_text(kqv)
 
     if which == "seed":
-        jobs = [("seed", a, None) for a in ARMS] if arm is None else [("seed", arm, None)]
+        jobs = (
+            [("seed", a, None) for a in ARMS] if arm is None else [("seed", arm, None)]
+        )
     elif which and ":" in which:
         run_s, prefix = which.split(":", 1)
-        jobs = [(int(run_s), a, prefix) for a in ARMS] if arm is None else [(int(run_s), arm, prefix)]
+        jobs = (
+            [(int(run_s), a, prefix) for a in ARMS]
+            if arm is None
+            else [(int(run_s), arm, prefix)]
+        )
     else:
-        run = int(which) if which else None
-        jobs = [(r, a, None) for r in HOSTS for a in ARMS]
-        if arm and run:
-            jobs = [(run, arm, None)]
+        if which is not None and not which.isdigit():
+            raise ValueError("host must be a run number or run:program-id")
+        hosts = [
+            (r, prefix) for r, prefix in GEN2_HOSTS if which is None or r == int(which)
+        ]
+        if not hosts:
+            raise ValueError(f"no generation-2 hosts for run {which}")
+        arms = ARMS if arm is None else (arm,)
+        jobs = [(r, a, prefix) for r, prefix in hosts for a in arms]
     for r, a, prefix in jobs:
         if r == "seed":
             host_src = SEED.read_text()
@@ -153,10 +190,6 @@ def main() -> None:
             host_src = program_code(r, prefix)
             host_name = prefix
             stem = f"g2_r{r}_{prefix}_{a}"
-        else:
-            host_src = program_code(r, HOSTS[r])
-            host_name = HOSTS[r]
-            stem = f"r{r}_{a}"
         src = build(host_src, surface, kqv, a)
         (OUT / f"{stem}.py").write_text(src)
         if arm is None and prefix is None and r != "seed":
@@ -170,7 +203,18 @@ def main() -> None:
         result = evaluate(src)
         out = {"run": r, "arm": a, "host": host_name, **result}
         (OUT / f"{stem}.json").write_text(json.dumps(out, indent=2, default=str))
-        print(json.dumps({"run": r, "host": host_name, "arm": a, "metrics": result["metrics"], "reason": result["reason"]}), flush=True)
+        print(
+            json.dumps(
+                {
+                    "run": r,
+                    "host": host_name,
+                    "arm": a,
+                    "metrics": result["metrics"],
+                    "reason": result["reason"],
+                }
+            ),
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

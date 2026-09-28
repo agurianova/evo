@@ -5,10 +5,9 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-import numpy as np
-
 from dataset import feature_frame, load_cv3_folds, load_folds, split_mode
 from evaluate import INVALID, aggregate, score_fold
+import numpy as np
 
 try:
     from behavior import behavior_metrics
@@ -41,7 +40,9 @@ def _as_predictor(payload: Any):
         obj = payload()
         if hasattr(obj, "fit") and hasattr(obj, "score"):
             return obj
-    raise ValueError("entrypoint() must return an object with fit(train) and score(rows)")
+    raise ValueError(
+        "entrypoint() must return an object with fit(train) and score(rows)"
+    )
 
 
 def _with_behavior(metrics: dict[str, float], payload: Any) -> dict[str, float]:
@@ -65,7 +66,9 @@ def _fresh_predictor(payload: Any):
         except ImportError:
             from problems.pmhctcr.codegen import exec_program
         return exec_program(src)
-    if callable(payload) and not (hasattr(payload, "fit") and hasattr(payload, "score")):
+    if callable(payload) and not (
+        hasattr(payload, "fit") and hasattr(payload, "score")
+    ):
         return _as_predictor(payload)
     return copy.deepcopy(payload)
 
@@ -90,7 +93,9 @@ def _run_cv3(payload: Any) -> tuple[dict[str, float], dict]:
         artifact["split"] = "cv3"
         return _with_behavior(metrics, predictor), artifact
     except Exception as exc:
-        return _with_behavior(dict(INVALID), predictor if predictor is not None else payload), {
+        return _with_behavior(
+            dict(INVALID), predictor if predictor is not None else payload
+        ), {
             "reason": f"{type(exc).__name__}: {exc}",
             "eval_fold": "cv3",
             "split": "cv3",
@@ -112,7 +117,9 @@ def _run(payload: Any, eval_fold: str) -> tuple[dict[str, float], dict]:
         artifact["n_train"] = int(len(train))
         return _with_behavior(metrics, predictor), artifact
     except Exception as exc:
-        return _with_behavior(dict(INVALID), predictor if predictor is not None else payload), {
+        return _with_behavior(
+            dict(INVALID), predictor if predictor is not None else payload
+        ), {
             "reason": f"{type(exc).__name__}: {exc}",
             "eval_fold": eval_fold,
         }

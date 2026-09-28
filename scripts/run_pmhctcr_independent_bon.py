@@ -12,15 +12,15 @@ from __future__ import annotations
 import argparse
 import ast
 import asyncio
+from datetime import UTC, datetime
 import json
 import os
+from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
 import traceback
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
@@ -45,7 +45,7 @@ _BLOCKED_MODULES = {
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def jsonable(obj: Any) -> Any:
@@ -288,7 +288,9 @@ def _best_of(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
         if row.get("status") != "ok":
             continue
         fit = float((row.get("metrics") or {}).get("fitness") or -1.0)
-        if best is None or fit > float((best.get("metrics") or {}).get("fitness") or -1.0):
+        if best is None or fit > float(
+            (best.get("metrics") or {}).get("fitness") or -1.0
+        ):
             best = row
     return best
 
@@ -325,7 +327,6 @@ async def _one_mutation(
         PythonSourceGenome,
         parse_search_replace,
     )
-    from gigaevo.exceptions import MutationError
 
     response = await llm.ainvoke(_build_prompt(seed, seed_metrics, expert, task))
     patch_text = _message_text(response)
@@ -394,7 +395,9 @@ async def run_replicate(args: argparse.Namespace) -> int:
             try:
                 if pending.is_file():
                     staged = json.loads(pending.read_text(encoding="utf-8"))
-                    if int(staged.get("attempt") or 0) == attempt and staged.get("code"):
+                    if int(staged.get("attempt") or 0) == attempt and staged.get(
+                        "code"
+                    ):
                         print(
                             f"[{utc_now()}] attempt {attempt}/{args.n}: resume staged child",
                             flush=True,
@@ -412,7 +415,12 @@ async def run_replicate(args: argparse.Namespace) -> int:
                     mut = await _one_mutation(llm, seed, seed_metrics, expert, task)
                     pending.write_text(
                         json.dumps(
-                            {"attempt": attempt, "n_patches": mut["n_patches"], "code": mut["code"], "patch_text": mut["patch_text"]},
+                            {
+                                "attempt": attempt,
+                                "n_patches": mut["n_patches"],
+                                "code": mut["code"],
+                                "patch_text": mut["patch_text"],
+                            },
                             ensure_ascii=False,
                         ),
                         encoding="utf-8",
@@ -443,7 +451,10 @@ async def run_replicate(args: argparse.Namespace) -> int:
                 row["status"] = "mutate_error"
                 row["error"] = f"{type(exc).__name__}: {exc}"
                 row["traceback"] = traceback.format_exc()[-2000:]
-                print(f"[{utc_now()}] attempt {attempt} {row['status']}: {row.get('error')}", flush=True)
+                print(
+                    f"[{utc_now()}] attempt {attempt} {row['status']}: {row.get('error')}",
+                    flush=True,
+                )
 
             if pending.is_file():
                 pending.unlink()
@@ -475,7 +486,8 @@ async def run_replicate(args: argparse.Namespace) -> int:
                         src.read_text(encoding="utf-8"), encoding="utf-8"
                     )
                     (run_dir / "champion_metrics.json").write_text(
-                        json.dumps(best, indent=2, ensure_ascii=False, default=str) + "\n",
+                        json.dumps(best, indent=2, ensure_ascii=False, default=str)
+                        + "\n",
                         encoding="utf-8",
                     )
             _write_summary(run_dir, summary)

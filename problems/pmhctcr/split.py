@@ -32,7 +32,9 @@ def _allele_ids(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     return a_ids, b_ids
 
 
-def draw_pmhc_partition(df: pd.DataFrame, *, seed: int = SPLIT_SEED) -> dict[str, list[str]]:
+def draw_pmhc_partition(
+    df: pd.DataFrame, *, seed: int = SPLIT_SEED
+) -> dict[str, list[str]]:
     a_ids, b_ids = _allele_ids(df)
     rng = np.random.default_rng(seed)
     a = a_ids.copy()
@@ -97,7 +99,11 @@ def assert_no_pmhc_leak(split: dict[str, Any]) -> None:
     for left, right in (("train", "val"), ("train", "test"), ("val", "test")):
         if set(split["pmhc"][left]) & set(split["pmhc"][right]):
             raise AssertionError(f"pMHC leak {left}/{right}")
-    assigned = set(split["pmhc"]["train"]) | set(split["pmhc"]["val"]) | set(split["pmhc"]["test"])
+    assigned = (
+        set(split["pmhc"]["train"])
+        | set(split["pmhc"]["val"])
+        | set(split["pmhc"]["test"])
+    )
     if len(assigned) != 20:
         raise AssertionError(f"expected 20 pMHCs, got {len(assigned)}")
 
@@ -106,7 +112,9 @@ def fold_complex_ids(df: pd.DataFrame, split: dict[str, Any]) -> dict[str, list[
     out: dict[str, list[str]] = {}
     for fold in FOLDS:
         ids = set(split["pmhc"][fold])
-        out[fold] = sorted(df.loc[df["mhc_epitope_id"].isin(ids), "complex_id"].tolist())
+        out[fold] = sorted(
+            df.loc[df["mhc_epitope_id"].isin(ids), "complex_id"].tolist()
+        )
     return out
 
 
@@ -128,7 +136,12 @@ def main() -> None:
     split = build_split(df)
     out = _PROBLEM_DIR / "splits" / f"{SPLIT_NAME}.json"
     write_split(out, split)
-    print(json.dumps({k: split[k] for k in ("name", "seed", "dropped", "n_pairs", "pmhc")}, indent=2))
+    print(
+        json.dumps(
+            {k: split[k] for k in ("name", "seed", "dropped", "n_pairs", "pmhc")},
+            indent=2,
+        )
+    )
     print("stats", json.dumps(split["stats"], indent=2))
     print("wrote", out)
 
