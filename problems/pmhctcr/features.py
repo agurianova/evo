@@ -20,7 +20,6 @@ try:
         surface_on,
         uses_learned_sequence,
     )
-    from problems.pmhctcr.initial_programs.cdr3_logistic import _aa_frac
     from problems.pmhctcr.regions import (
         chain_region_from_row,
         region_indices,
@@ -36,9 +35,23 @@ except ImportError:
         surface_on,
         uses_learned_sequence,
     )
-    from initial_programs.cdr3_logistic import _aa_frac
     from regions import chain_region_from_row, region_indices, vj_onehot_from_row
     from spots import spot_feature_vector
+
+_AA = "ACDEFGHIKLMNPQRSTVWY"
+
+
+def _aa_frac(seq: object) -> np.ndarray:
+    text = "" if seq is None or (isinstance(seq, float) and np.isnan(seq)) else str(seq)
+    counts = np.zeros(len(_AA), dtype=np.float64)
+    for ch in text:
+        i = _AA.find(ch)
+        if i >= 0:
+            counts[i] += 1
+    n = counts.sum()
+    if n > 0:
+        counts /= n
+    return counts
 
 
 def _seq_text(df: pd.DataFrame, col: str, i: int) -> str:

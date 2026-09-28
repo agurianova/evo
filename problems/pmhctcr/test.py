@@ -1,7 +1,7 @@
 """Score a saved program on the held-out test pMHCs.
 
 Generated children are Python (``GENOTYPE_JSON`` + ``entrypoint()``).
-Raw JSON genomes and the leftover ``cdr3_logistic.py`` seed are still accepted.
+Raw JSON genomes are still accepted.
 """
 
 from __future__ import annotations

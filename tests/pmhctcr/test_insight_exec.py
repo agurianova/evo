@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 
@@ -10,7 +9,6 @@ from gigaevo.evolution.mutation.constants import MUTATION_CONTEXT_METADATA_KEY
 from gigaevo.evolution.mutation.context import InsightsMutationContext
 from gigaevo.llm.agents.insights import ProgramInsight, ProgramInsights
 from gigaevo.programs.program import Program
-from gigaevo.prompts import MutationSuggestionsPrompts, load_prompt
 from problems.pmhctcr.codegen import loads_program, render_program
 from problems.pmhctcr.genotype import default_genotype, functional_dumps, surface_on
 from problems.pmhctcr.insight_exec import (
@@ -139,28 +137,6 @@ def test_mutate_single_falls_back_to_scheduler_without_insights():
     assert "def entrypoint" in spec.code
     child = loads_program(spec.code)
     assert child.meta.operator_applied is not None
-
-
-def test_mutation_suggestions_prompt_asks_for_one_python_patch_step():
-    prompts_dir = (
-        Path(__file__).resolve().parents[2]
-        / "problems"
-        / "pmhctcr"
-        / "prompts_python_patch_final"
-    )
-    text = load_prompt("mutation_suggestions", "system", prompts_dir=prompts_dir)
-    assert "exactly one" in text.lower() and "insight" in text.lower()
-    assert "EVOLVE-BLOCK" in text
-    assert "{expert_hypotheses}" in text
-    assert "SEARCH/REPLACE" in text
-    filled = MutationSuggestionsPrompts.system(prompts_dir=prompts_dir).format(
-        task_description="task",
-        metrics_description="metrics",
-        expert_hypotheses="H1 surface complementarity",
-    )
-    assert "H1 surface complementarity" in filled
-    assert "{task_description}" not in filled
-    assert "{expert_hypotheses}" not in filled
 
 
 def test_guided_create_surface_when_already_on_is_rejected():

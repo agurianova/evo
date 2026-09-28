@@ -13,8 +13,6 @@ prompt, and search configurations live under
   ??? the 249-line seed cited in Appendix B. Only the marked EVOLVE blocks are mutable.
 - [`problems/pmhctcr/expert_hypotheses.txt`](problems/pmhctcr/expert_hypotheses.txt)
   ??? the four expert hypotheses (H1???H4) used in guided search.
-- [`problems/pmhctcr/prompts_python_patch_final/mutation_suggestions/system.txt`](problems/pmhctcr/prompts_python_patch_final/mutation_suggestions/system.txt)
-  ??? the expert-on mutation-suggestion template that interpolates those hypotheses.
 - [`problems/pmhctcr/splits/r0.json`](problems/pmhctcr/splits/r0.json) ??? frozen 12/4/4 split.
 - Hydra presets `config/experiment/pmhctcr_python_patch_final.yaml` (expert on)
   and `..._final_off.yaml` (expert off; same template, hypotheses disabled).
@@ -23,6 +21,16 @@ prompt, and search configurations live under
 - Table scripts: `scripts/export_mutation_tables.py` rebuilds Appendix H from
   saved traces; `scripts/verify_paper_artifacts.py` checks Tables 2???3 / Figure 4
   when a trace archive is present.
+
+## What is not in Git
+
+- ImmRep25 parquet tables, PDB/MaSIF trees, and ESM caches. Set `PMHCTCR_DATA`
+  to refit or rescore. Tests that need those assets skip when they are absent.
+- Full search logs (expert-on/off, Plain, Memory, Best-of-N). They will be
+  checked against the paper and linked from [`artifacts/`](artifacts/README.md)
+  once a public disk archive is available. Score tables stay in `analysis/`.
+- External comparator inference pipelines and weights. `analysis/heldout4_*.tsv`
+  only check the published score summaries.
 
 ## Install and checks
 

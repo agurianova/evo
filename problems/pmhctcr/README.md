@@ -82,11 +82,7 @@ verify reported table values and cannot rerun comparator prediction.
 
 The published seed is
 [`initial_programs/python_patch_seed.py`](initial_programs/python_patch_seed.py).
-The expert prompt is [`expert_hypotheses.txt`](expert_hypotheses.txt). The
-expert-on mutation-suggestion template that interpolates it is
-[`prompts_python_patch_final/mutation_suggestions/system.txt`](prompts_python_patch_final/mutation_suggestions/system.txt).
-Older unused system-prompt copies are not in this snapshot. Expert-off runs use
-the same template with the expert block empty.
+The expert prompt is [`expert_hypotheses.txt`](expert_hypotheses.txt).
 
 ## Search traces
 
