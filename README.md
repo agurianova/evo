@@ -22,16 +22,6 @@ prompt, and search configurations live under
   saved traces; `scripts/verify_paper_artifacts.py` checks Tables 2???3 / Figure 4
   when a trace archive is present.
 
-## What is not in Git
-
-- ImmRep25 parquet tables, PDB/MaSIF trees, and ESM caches. Set `PMHCTCR_DATA`
-  to refit or rescore. Tests that need those assets skip when they are absent.
-- Full search logs (expert-on/off, Plain, Memory, Best-of-N). They will be
-  checked against the paper and linked from [`artifacts/`](artifacts/README.md)
-  once a public disk archive is available. Score tables stay in `analysis/`.
-- External comparator inference pipelines and weights. `analysis/heldout4_*.tsv`
-  only check the published score summaries.
-
 ## Install and checks
 
 Python 3.11+:
