@@ -1,0 +1,257 @@
+# memory=v2: v1 card machinery with a contextual Bayesian causal core.
+# The initial production scope is bounded, singleton-parent MAP-Elites evolution.
+# Multi-parent crossover is rejected until decisions move to mutation level.
+defaults:
+  - llm: gemini
+  - context: global
+  - no_card_evidence: none
+  - excluder: lineage
+  - applicability: agentic
+  - evictor: causal
+  - write: live
+  - _self_
+  - transfer: none
+  # OFF by default = byte-identical control. ``linear`` augments the shared
+  # feature config, provider, and evictor; it must merge after ``_self_`` to
+  # land on those body-defined nodes.
+  - embedding_prior: none
+
+# Start producing cards early enough for a 250-mutation run to evaluate them.
+# Refresh content and retirement every five successful ingestor sweeps.
+write:
+  refresh_every: 5
+
+capabilities:
+  read: true
+  write: true
+  causal_v2: true
+
+run_seed: 0
+# A causal decision is scoped to one mutation attempt. Reusing a cached parent
+# assignment across concurrent mutations would give one decision multiple outcomes.
+coalesce_refresh: false
+
+neutral_gain: 0.0
+baseline_prior: [3.0, 3.0]
+evidence:
+  min_effective_events: 3
+
+environment:
+  _target_: gigaevo.memory_v2.models.EnvironmentFingerprint
+  task_key: ${memory_task_key}
+  problem_name: ${problem.name}
+  llm:
+    _target_: gigaevo.memory_v2.models.LLMFingerprint
+    model_name: ${model_name}
+    base_url: ${llm_base_url}
+    temperature: ${temperature}
+  mutation_operator: ${get_object:${mutation_operator._target_}}
+  program_format: ${program_format.id}
+  pipeline: ${pipeline.id}
+  algorithm: ${hydra:runtime.choices.algorithm}
+
+map_context_config:
+  _target_: gigaevo.memory_v2.context.MapContextConfig
+  neighbor_radius: 1
+
+credit:
+  _target_: gigaevo.memory_v2.models.LineageCreditConfig
+  # D1 trains immediate utility. At larger depths, only the non-negative,
+  # archive-accepted best-descendant lift trains the separate lineage head,
+  # after a fixed number of same-island mutation opportunities.
+  lineage_depth: 3
+  opportunity_budget: 32
+
+context_source:
+  _target_: gigaevo.memory_v2.context.MapElitesContextSource
+  strategy: ${ref:evolution_strategy}
+  metrics_context: ${ref:problem_context::metrics_context}
+  environment: ${ref:memory.environment}
+  config: ${ref:memory.map_context_config}
+  credit: ${ref:memory.credit}
+  trajectory_id_source: ${ref:memory.ledger}
+
+ledger:
+  _target_: gigaevo.memory_v2.ledger.SqliteCausalLedger
+  # The full-bank applicability schema uses its own file. Keep prior evidence
+  # immutable; no ledger migration or restamping is performed.
+  path: ${checkpoint_dir}/memory_v2_selection_evidence.sqlite3
+  environment: ${ref:memory.environment}
+
+outcome_sink: ${ref:memory.ledger}
+
+feature_config:
+  _target_: gigaevo.memory_v2.features.FeatureConfig
+  # The live BehaviorSpace owns the ordered statistical axes and transforms.
+  behavior_keys: ${ref:memory.context_source::behavior_keys}
+  # Smooth progress coordinate with an O(100)-iteration half-scale; this is a
+  # monotone context feature, never an eligibility or retirement threshold.
+  progress_log_scale: 100.0
+  # Card kind is durable action metadata, unlike free-form tags. A single
+  # program-minus-insight contrast shares evidence across exact card lineages.
+  card_kind_contrast: true
+  # Agentic retrieval supplies a frozen, pre-treatment applicability label. Its
+  # shared effect is learned from randomized terminal outcomes, never asserted
+  # by the retriever itself. The no-RAG arm removes this coordinate entirely.
+  retrieval_applicability_contrast: ${memory.applicability.retrieval_applicability_contrast}
+  # The mutator's grounded citation is post-treatment uptake. It never gates
+  # posterior eligibility (intention-to-treat); it is one effect-coded contrast
+  # separating cited from delivered-but-uncited outcomes.
+  citation_contrast: true
+
+feature_map:
+  _target_: gigaevo.memory_v2.features.HierarchicalFeatureMap
+  config: ${ref:memory.feature_config}
+
+posterior_config:
+  _target_: gigaevo.memory_v2.posterior.TerminalUtilityPosteriorConfig
+  baseline_prior_sd: 0.75
+  shared_effect_prior_sd: 0.35
+  card_effect_prior_sd: 0.25
+  # ``empirical_bayes`` relearns the reward prior scales above (and the residual
+  # prior centre/spread) by maximizing the marginal likelihood, warm-started at
+  # these constants. A self-normalizing observation floor keeps cold banks
+  # byte-identical to ``fixed``.
+  hyperparameter_estimation: fixed
+  reward_residual_sd_initial: 0.20
+  # Numerical support in normalized reward units. The 0.01 lower bound is the
+  # default low-noise operating floor. Retirement fails closed and names this
+  # knob in its warning when posterior mass accumulates at either boundary.
+  reward_residual_sd_bounds: [0.01, 5.0]
+  reward_residual_log_prior_sd: 0.75
+  reward_residual_mode_grid_points: 17
+  reward_residual_quadrature_mass_rtol: 1.0e-5
+  reward_residual_moment_rtol: 1.0e-3
+  reward_coefficient_mean_tolerance: 1.0e-3
+  reward_residual_upper_boundary_mass_limit: 1.0e-4
+  reward_residual_quadrature_max_depth: 8
+  unknown_measurement_sd: 0.15
+  # Ordinary runs use 70/30 delivery/control after a balanced validation run.
+  # Validation launchers override both reference and policy probabilities to 0.50.
+  reference_offer_probability: 0.70
+  safety_integration_tolerance: 1.0e-8
+  invalidity_prior_probability: 0.05
+  safety_baseline_prior_sd: 0.15
+  safety_shared_effect_prior_mean: 0.0
+  safety_shared_effect_prior_sd: 0.20
+  safety_card_effect_prior_sd: 0.60
+
+posterior:
+  _target_: gigaevo.memory_v2.posterior.HierarchicalTerminalUtilityPosterior
+  feature_map: ${ref:memory.feature_map}
+  config: ${ref:memory.posterior_config}
+
+safety:
+  _target_: gigaevo.memory_v2.policy.SafetyConstraint
+  gate_mode: exclude_confident_incremental_harm
+  max_treated_invalid_probability: null
+  max_incremental_invalid_probability: 0.10
+  alpha: 0.10
+
+policy_config:
+  _target_: gigaevo.memory_v2.policy.ProbabilityMatchingConfig
+  offer_probability: 0.70
+  proposal_exploration_probability: 0.05
+  posterior_summary_samples: 1024
+  proposal_worlds: 512
+  abstain_effect: 0.0
+  max_pending_per_card: 2
+
+policy:
+  _target_: gigaevo.memory_v2.policy.ChanceConstrainedProbabilityMatchingPolicy
+  safety: ${ref:memory.safety}
+  config: ${ref:memory.policy_config}
+
+store:
+  _target_: gigaevo.memory.storage.local.LocalMemoryStore
+  config:
+    _target_: gigaevo.memory.storage.config.StoreConfig
+    path: ${memory_bank_dir}
+    research:
+      _target_: gigaevo.memory.storage.config.ResearchConfig
+      default_top_k: 8
+      max_iters: 1
+      max_cards: 3
+  llm: ${ref:memory.llm}
+  prompts_dir: ${prompts.dir}
+
+shortlister:
+  _target_: gigaevo.memory.read.shortlist.ResearchShortlister
+  store: ${ref:memory.store}
+  digest_max_cards: 50
+
+candidate_source:
+  _target_: gigaevo.memory_v2.candidates.WholeBankCandidateSource
+  store: ${ref:memory.store}
+  applicability: ${ref:memory.applicability}
+  excluder: ${ref:memory.excluder}
+  # Causal retirement evidence is environment-scoped, not yet identified per
+  # source task. Validation rejects cross-task delivery while retirement is on.
+  allow_cross_task: false
+  allowed_kinds: [insight, program]
+
+renderer:
+  _target_: gigaevo.memory_v2.render.ImmutableCardRenderer
+
+provider:
+  _target_: gigaevo.memory_v2.provider.CausalBanditMemoryProvider
+  # posterior must resolve before candidate_source: it pulls feature_map ->
+  # feature_config, whose retrieval_applicability_contrast is a plain
+  # interpolation into memory.applicability, while candidate_source is what
+  # instantiates memory.applicability (the ${ref:} resolver replaces the tree
+  # node with the object). Resolve feature_config first, then applicability.
+  posterior: ${ref:memory.posterior}
+  candidate_source: ${ref:memory.candidate_source}
+  context_source: ${ref:memory.context_source}
+  ledger: ${ref:memory.ledger}
+  policy: ${ref:memory.policy}
+  renderer: ${ref:memory.renderer}
+  store: ${ref:memory.store}
+  selection_leases: ${ref:selection_leases}
+  task_key: ${memory_task_key}
+  run_seed: ${memory.run_seed}
+
+context_model:
+  task_key: ${memory_task_key}
+
+causal_writer_updater:
+  _target_: gigaevo.memory_v2.writer.CausalV2ContentOnlyUpdater
+  ledger: ${ref:memory.ledger}
+  selection_leases: ${ref:selection_leases}
+
+writer:
+  _target_: gigaevo.memory.write.writer.MemoryWriter
+  # Evidence-only runs keep the live/final writer hooks but skip every path
+  # that authors a new insight or program card. Existing-card stamps, causal
+  # ledger synchronization, and selection-lease release still run.
+  authoring_enabled: true
+  llm: ${ref:memory.llm}
+  evictor: ${ref:memory.evictor}
+  store: ${ref:memory.store}
+  checkpoint_dir: ${checkpoint_dir}
+  task_key: ${memory_task_key}
+  metrics_context: ${ref:problem_context::metrics_context}
+  stats_updater: ${ref:memory.causal_writer_updater}
+  task_description: ${ref:problem_context::task_description}
+  # Do not turn every rejected mutation into a selectable action. Rejected
+  # programs enter only when their proximal gain is genuinely positive.
+  require_archive_or_positive_gain: true
+  best_programs_percent: 5.0
+  ingest_call_timeout_s: 300.0
+  max_ingest_attempts: 3
+  dedup_policy:
+    _target_: gigaevo.memory.write.policies.DedupPolicy
+    online_top_k: 5
+    across_tasks: false
+  program_exemplars:
+    _target_: gigaevo.memory.write.policies.ProgramExemplarPolicy
+    enabled: true
+    top_k_per_refresh: 4
+    max_cards: 32
+    # Zero means strict improvement without a raw task-scale epsilon. Any
+    # non-zero override is task-specific and must use that metric's units.
+    min_fitness_gap: 0.0
+    store_code: false
+  selection_leases: ${ref:selection_leases}
+  min_effective_events: ${memory.evidence.min_effective_events}
+  prompts_dir: ${prompts.dir}

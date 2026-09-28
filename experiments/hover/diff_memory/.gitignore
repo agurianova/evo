@@ -1,0 +1,6 @@
+cfg_*.yaml
+latest.env
+logs/
+pids_*.txt
+latest_*.env
+tg_queue/

@@ -1,0 +1,33 @@
+TASK — TABULAR BINARY CLASSIFICATION (higgs-small)
+
+DATASET — classify simulated particle-collision events as Higgs-boson signal vs background from detector kinematics and derived invariant-mass features; all features standardized
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] lepton_pT   transverse momentum of the charged lepton
+- [1] lepton_eta  pseudorapidity of the charged lepton
+- [2] lepton_phi  azimuthal angle of the charged lepton
+- [3] met_magnitude magnitude of missing transverse energy (undetected neutrino)
+- [4] met_phi     azimuthal angle of missing transverse energy
+- [5] jet1_pt     transverse momentum of jet 1
+- [6] jet1_eta    pseudorapidity of jet 1
+- [7] jet1_phi    azimuthal angle of jet 1
+- [8] jet1_btag   b-tagging discriminant of jet 1 (discrete, 3 values)
+- [9] jet2_pt     transverse momentum of jet 2
+- [10] jet2_eta    pseudorapidity of jet 2
+- [11] jet2_phi    azimuthal angle of jet 2
+- [12] jet2_btag   b-tagging discriminant of jet 2 (discrete, 3 values)
+- [13] jet3_pt     transverse momentum of jet 3
+- [14] jet3_eta    pseudorapidity of jet 3
+- [15] jet3_phi    azimuthal angle of jet 3
+- [16] jet3_btag   b-tagging discriminant of jet 3 (discrete, 3 values)
+- [17] jet4_pt     transverse momentum of jet 4
+- [18] jet4_eta    pseudorapidity of jet 4
+- [19] jet4_phi    azimuthal angle of jet 4
+- [20] jet4_btag   b-tagging discriminant of jet 4 (discrete, 3 values)
+- [21] m_jj        invariant mass of the two-jet system (derived)
+- [22] m_jjj       invariant mass of the three-jet system (derived)
+- [23] m_lv        invariant mass of lepton + neutrino system (derived)
+- [24] m_jlv       invariant mass of jet + lepton + neutrino system (derived)
+- [25] m_bb        invariant mass of the two b-tagged jets (derived)
+- [26] m_wbb       invariant mass of the W + bb system (derived)
+- [27] m_wwbb      invariant mass of the WW + bb system (derived)

@@ -1,0 +1,20 @@
+# @package _global_
+
+defaults:
+  - /experiment/base
+  - override /pipeline: guided
+  - override /memory: none
+  - override /program_format: json_document
+  - override /loader: tab_wpf_seed
+  - override /mutation: structured_diff_tab_wpf
+  - _self_
+
+problem:
+  name: tab_wpf
+  dataset: california
+
+# A single tabular evolution should not inherit the repository-wide 8-way,
+# 81k-token production profile. These conservative defaults can be overridden.
+max_in_flight: 2
+llm_max_concurrent: 2
+max_tokens: 8192

@@ -1,0 +1,477 @@
+=== PROMPT DUMP 20260318T110248 ===
+prompt_id: 96a45e744bbff588
+
+=== SYSTEM PROMPT ===
+You are an expert in evolutionary optimization of HotpotQA prompt-chain programs.
+
+OBJECTIVE:
+CHAIN EVOLUTION
+You are evolving a multi-step reasoning chain defined with structured fields.
+Each LLM step is specified by semantic fields (aim, stage_action, etc.) that are
+automatically assembled into prompts — you do not write raw prompt text. You control
+the structured-field content and the chain-level system_prompt.
+
+Consider the next guidelines:
+1) Chain optimization is a high-dimensional, experimental design problem. Each LLM step's
+   structured fields may combine:
+   - Reasoning scaffolds: explicit step-by-step thinking, sub-problem decomposition
+   - Role & context framing: role definition, domain setup, goal specification, success criteria
+   - Instruction precision: task boundaries, structural directives
+   - In-context exemplars: input-output examples, pattern demonstrations
+   - Constraints: output schema, formatting rules
+   Additionally, multi-step chains require attention to:
+   - Step coordination: each step should produce output shaped for its downstream consumers
+   - Information flow: pass only relevant information forward to avoid context dilution
+   - Role specialization: each step should have a clear, focused responsibility
+2) Structured fields of LLM steps:
+   - "aim" (REQUIRED, non-empty): Primary objective of this step
+   - "stage_action" (REQUIRED, non-empty): Specific action to perform
+   - "reasoning_questions" (optional): Key questions to answer
+   - "example_reasoning" (optional): Example of expert reasoning
+   These fields are assembled into a full LLM prompt for each step. The assembly
+   order (top to bottom):
+
+     [If system_prompt is non-empty]
+     System Instructions:
+     {system_prompt}
+
+     Data:
+     {outer_context}              ← initial user input
+
+     [If step has dependencies]
+     Previous steps:
+     Step N. Title
+     Result: <output>
+     ...
+     Based on the results of previous steps, perform the following task:
+     Step {number}. {title}
+     Objective: {aim}
+     Task: {stage_action}
+     Questions: {reasoning_questions}
+     Example reasoning: {example_reasoning}
+
+   Key points:
+   - system_prompt is shared — prepended to every LLM step
+   - outer_context wraps every LLM step as "Data:\n{outer_context}"
+   - Dependencies list controls which prior step outputs are visible
+3) Implementation details:
+   - entrypoint() returns a dict with "system_prompt" (str, may be empty) and "steps" (list of dicts)
+   - Each step dict has metadata fields: number, title, step_type, dependencies
+   - LLM steps carry the four structured fields above; tool steps carry step_config
+   - Tool steps use $-reference syntax in input_mapping:
+       $outer_context — the original sample context string
+       $history[-1] — output of the immediately preceding step
+       $history[N] — output of step at index N (0-based)
+
+STEP TYPES
+The chain supports two step types:
+- "llm": LLM reasoning step with structured fields (aim, stage_action, reasoning_questions,
+  example_reasoning). The LLM receives the assembled prompt and produces a text response.
+- "tool": Tool execution step with step_config. Currently available tool:
+    "retrieve" — BM25 retrieval over Wikipedia abstracts. Returns top-k passages
+    formatted as "[i] Title | sentence1 sentence2 ...".
+    Usage in step_config: {"tool_name": "retrieve", "input_mapping": {"query": "$reference"}}
+    Where $reference is one of: $outer_context, $history[-1], $history[N]
+
+EVOLUTION MODE — STATIC
+The chain topology (step count, types, dependencies) is fixed. Only the structured field
+content of non-frozen LLM steps and the chain-level system_prompt are evolvable.
+Frozen steps must match the baseline exactly and cannot be modified.
+Each step dict additionally includes a "frozen" metadata field (True/False).
+
+TASK DEFINITION — MULTI-HOP QUESTION ANSWERING
+
+Challenge: Design a chain that maximizes token-level F1 accuracy on multi-hop reasoning questions.
+
+OBJECTIVE
+Return a chain specification guiding the downstream LLM such that:
+ 1) All chain steps are valid and well-defined
+ 2) The chain guides the LLM through multi-hop reasoning using retrieval and synthesis
+ 3) The final step returns a clear, extractable answer in "Answer: <answer>" format
+ 4) Maximizes token-level F1 accuracy between predicted and gold answers (SQuAD-style)
+
+FITNESS METRIC: Token-level F1 (not Exact Match). Partial credit is awarded for predictions
+that share tokens with the gold answer — e.g., predicting "New York City" for gold "New York"
+scores F1=0.80 rather than 0. Focus on producing answers that contain the correct content
+tokens, not necessarily identical surface forms.
+
+Output: 'Answer: <answer>' (extractable by regex) | Goal: Token-level F1 > 0.7
+
+PIPELINE COMPONENTS
+- LLM: Model with basic multi-hop reasoning capabilities
+- Retrieval: BM25 over Wikipedia abstracts via the "retrieve" tool; returns top-k passages
+  formatted as "[i] Title | sentence1 sentence2 ..."
+
+CHAIN STRUCTURE — FIXED 6-STEP TOPOLOGY
+
+Step 1 (TOOL) — "Retrieve first-hop passages"
+  Type: tool | Dependencies: [] | Frozen: Yes
+  Purpose: Retrieve Wikipedia passages using the question as query.
+  Config: tool_name="retrieve", input_mapping={"query": "$outer_context"}
+
+Step 2 (LLM) — "Summarize first-hop passages"
+  Type: llm | Dependencies: [1] | Frozen: No
+  Purpose: Extract key facts from the retrieved passages relevant to the question.
+
+Step 3 (LLM) — "Generate second-hop query"
+  Type: llm | Dependencies: [2] | Frozen: No
+  Purpose: Identify missing information and generate a focused second-hop search query.
+
+Step 4 (TOOL) — "Retrieve second-hop passages"
+  Type: tool | Dependencies: [3] | Frozen: Yes
+  Purpose: Retrieve additional passages using the generated query.
+  Config: tool_name="retrieve", input_mapping={"query": "$history[-1]"}
+
+Step 5 (LLM) — "Combine evidence"
+  Type: llm | Dependencies: [2, 4] | Frozen: No
+  Purpose: Integrate first-hop summary with second-hop passages into unified evidence.
+
+Step 6 (LLM) — "Final answer"
+  Type: llm | Dependencies: [2, 5] | Frozen: No
+  Purpose: Synthesize all evidence and produce the final answer.
+
+GENOME FORMAT
+entrypoint() must return a dict:
+{
+    "system_prompt": "string — shared instruction prepended to every LLM step",
+    "steps": [
+        {   # Step 1 (tool — frozen, must match exactly)
+            "number": 1,
+            "title": "Retrieve first-hop passages",
+            "step_type": "tool",
+            "dependencies": [],
+            "frozen": True,
+            "step_config": {
+                "tool_name": "retrieve",
+                "input_mapping": {"query": "$outer_context"},
+            },
+        },
+        {   # Step 2 (LLM)
+            "number": 2,
+            "title": "Summarize first-hop passages",
+            "step_type": "llm",
+            "aim": "required — step objective",
+            "stage_action": "required — what the LLM should do",
+            "reasoning_questions": "optional — guiding questions",
+            "example_reasoning": "optional — example thought process",
+            "dependencies": [1],
+            "frozen": False,
+        },
+        ...  # Steps 3-6 follow the same pattern
+    ],
+}
+
+CONSTRAINTS
+- LLM steps require non-empty "aim" and "stage_action" fields
+- Dependencies must reference only earlier steps (by number)
+- No dependency cycles
+- The final LLM step must guide the LLM to output "Answer: <answer>"
+- Steps list must have exactly 6 entries
+- Step types and dependencies must match the fixed topology
+- Frozen steps (1 and 4) must match the baseline exactly
+
+FAILURE MODES
+- Missing or empty required fields (aim, stage_action for LLM steps)
+- Dependency cycles or references to non-existent/later steps
+- Final step not producing extractable "Answer: ..." output
+- Wrong number of steps or type/deps mismatch with fixed topology
+- Frozen step content differs from baseline
+
+OUTPUT FORMAT
+Implement `def entrypoint()` that returns:
+- A dict with "system_prompt" (str) and "steps" (list of step dicts)
+- Each step dict has metadata fields (number, title, step_type, dependencies)
+- LLM steps have structured fields (aim, stage_action, reasoning_questions, example_reasoning)
+- LLM return format for final step: 'Answer: <answer>' (extractable by regex)
+- Each step dict includes "frozen" field (True/False)
+
+TASK HINTS
+- Keep prompts focused on each step's specific role
+- Query generation steps should instruct the LLM to output only the search query, avoiding extraneous text that confuses the retriever
+
+AVAILABLE METRICS:
+- fitness: Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection. (↑ better; [0.0, 1.0] range)
+- avg_extraction_failures: Average fraction of samples where answer extraction failed (↓ better; [0.0, 1.0] range)
+- is_valid: Whether the program is valid (1 valid, 0 invalid) (↑ better; [0.0, 1.0] range)
+
+---
+
+MUTATION PRINCIPLES — HOTPOTQA DOMAIN CONSTRAINTS:
+1. Step 3 is critical: Output MUST be raw BM25 query terms ONLY (no prose).
+2. Step-specific constraints:
+   - Step 2: Concise summary (3-5 sentences, adjust for question complexity), key facts only
+   - Step 3: Output ONLY query terms (e.g., 'Marie Curie nationality')
+   - Step 5: Consolidate evidence in structured format (e.g., table)
+   - Step 6: Final answer format 'Answer: <answer>'
+3. Shorter prompts: Prefer explicit constraints over explanations
+4. Evidence-driven: Fix specific broken steps identified in failure analysis
+
+=== USER PROMPT ===
+Mutate the parent program(s) with focus on domain constraints and step validity.
+
+CRITICAL PRIORITIZATION: Step 3 is the source of 70% of errors. Allocate 80% of your mutation effort to improving step 3.
+
+Before writing code:
+1. If failure analysis shows missing gold documents (retrieval failure):
+   - Focus on step 3: Convert missing document titles into raw BM25 query terms by using key entities and attributes extracted in step 2.
+   - Example transformation:
+        Missing gold doc: 'Marie Curie'
+        Step 2 output: 'Marie Curie was a Polish and naturalized-French physicist and chemist.'
+        Step 3 query: 'Marie Curie nationality'
+   - Ensure step 3 output is ONLY the query terms (no prose).
+
+2. If failure analysis shows no missing gold documents but wrong answer (reasoning failure):
+   - Focus on steps 5-6:
+        - Step 5: Must consolidate evidence from both hops in a structured format (e.g., table) to avoid missing key facts.
+        - Step 6: Must strictly follow 'Answer: <answer>' and use only the consolidated evidence from step 5.
+
+3. Enforce step-specific constraints:
+   - Step 2: Concise summary (3-5 sentences, adjust for question complexity), key facts only
+   - Step 3: Output ONLY raw query terms (e.g., 'Marie Curie nationality')
+   - Step 5: Structured evidence consolidation (e.g., table)
+   - Step 6: Strict 'Answer: <answer>' format
+
+Produce program that strictly follows HotpotQA constraints.
+
+Return JSON with keys: "archetype", "justification", "insights_used", "code".
+The "code" field must contain only valid Python code (no markdown fences).
+
+=== Parent 1 ===
+```python
+def entrypoint():
+    return {
+        "system_prompt": "Extract minimal but complete answers from evidence. Include all tokens necessary for correctness (e.g., 'from' in time phrases), but omit extra context. For binary questions, output ONLY 'yes' or 'no'. Maximize token overlap with gold answers by matching evidence exactly.",
+        "steps": [
+            # Step 1: First-hop retrieval (frozen tool step)
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+                "frozen": True,
+            },
+            # Step 2: Summarize first-hop passages
+            {
+                "number": 2,
+                "title": "Summarize key facts from passages.",
+                "step_type": "llm",
+                "aim": "Extract key facts addressing the question with all critical entities and context.",
+                "stage_action": (
+                    "Read passages and extract ONLY key facts directly addressing the question. "
+                    "Include all entity names and specific context. Max 3 sentences. "
+                    "Do NOT omit any critical information needed for query generation."
+                ),
+                "reasoning_questions": "What entities and specific context are essential for answering the question?",
+                "example_reasoning": (
+                    "Question: When was the Actress who starred in Our Sons with Ann-Margret born?\n"
+                    "Passages: [1] Our Sons is a 1994 film starring Ann-Margret and an unnamed actress.\n"
+                    "Our Sons is a 1994 film starring Ann-Margret. The other actress remains unnamed."
+                ),
+                "dependencies": [1],
+                "frozen": False,
+            },
+            # Step 3: Generate second-hop query
+            {
+                "number": 3,
+                "title": "Generate second-hop query.",
+                "step_type": "llm",
+                "aim": "Generate minimal BM25 query for missing information from step 2.",
+                "stage_action": (
+                    "Generate a minimal BM25 query using ONLY essential keywords from step 2. "
+                    "REMOVE ALL STOP WORDS (the, a, is, etc.). Output ONLY the query terms (3-5 words max), no other text."
+                ),
+                "reasoning_questions": "What 3-5 essential keywords will best retrieve the missing information?",
+                "example_reasoning": (
+                    "Step 2: Our Sons is a 1994 film starring Ann-Margret. The other actress remains unnamed.\n"
+                    "actress Our Sons Ann-Margret"
+                ),
+                "dependencies": [2],
+                "frozen": False,
+            },
+            # Step 4: Second-hop retrieval (frozen tool step)
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+                "frozen": True,
+            },
+            # Step 5: Combine evidence
+            {
+                "number": 5,
+                "title": "Combine evidence",
+                "step_type": "llm",
+                "aim": "Extract exact minimal answer phrase from combined evidence.",
+                "stage_action": (
+                    "Identify the EXACT contiguous phrase in combined evidence that answers the question. "
+                    "Include ALL necessary tokens (prepositions, articles) when they're part of the answer span. "
+                    "Output ONLY this minimal phrase with no extra context."
+                ),
+                "reasoning_questions": "What is the minimal contiguous phrase that fully answers the question?",
+                "example_reasoning": (
+                    "First-hop: Tony Halme was the singer of Mestarit salilla.\n"
+                    "Second-hop: Tony Halme served in the Finnish Parliament from 2003 to 2007.\n"
+                    "from 2003 to 2007"
+                ),
+                "dependencies": [2, 4],
+                "frozen": False,
+            },
+            # Step 6: Final answer
+            {
+                "number": 6,
+                "title": "Final answer",
+                "step_type": "llm",
+                "aim": "Output step 5's answer phrase verbatim in required format.",
+                "stage_action": (
+                    "Output the answer phrase from step 5 exactly as is.\n"
+                    "Format: Answer: <answer>"
+                ),
+                "reasoning_questions": "What is the unmodified answer phrase from step 5?",
+                "example_reasoning": (
+                    "Step 5 answer phrase: from 2003 to 2007\n"
+                    "Answer: from 2003 to 2007"
+                ),
+                "dependencies": [2, 5],
+                "frozen": False,
+            },
+        ],
+    }
+```
+
+## Program Metrics
+
+- fitness : 0.487 (Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection.; ↑ better)
+- avg_extraction_failures : 0.003 (Average fraction of samples where answer extraction failed; ↓ better)
+- is_valid : 1 (Whether the program is valid (1 valid, 0 invalid); ↑ better)
+
+---
+
+## Program Insights
+
+- **[query_minimization]**[harmful]**[high]**: Step 3 removes all stop words and limits queries to 3-5 words, breaking meaning (e.g., 'born in' becomes 'born'). Causes poor second-hop retrieval. Relax stop word removal and increase word limit to 5-7.
+- **[contiguous_span_constraint]**[harmful]**[high]**: Step 5 requires contiguous phrase extraction, but multi-hop answers may be non-contiguous. Forces incomplete answers. Allow combining non-contiguous tokens from evidence for the answer.
+- **[system_prompt_minimization]**[harmful]**[medium]**: System prompt emphasizes minimal answers, causing omission of tokens in gold (e.g., 'from'). Reduces F1. Adjust to prioritize token overlap with gold over minimality.
+- **[summary_noise]**[harmful]**[medium]**: Step 2 extracts up to 3 sentences, including irrelevant facts. Pollutes step 3 query. Focus step 2 on extracting only entities and direct context for missing info.
+- **[example_misalignment]**[harmful]**[low]**: Step 5 example includes 'from' in time answer, but gold may omit it. Causes extra tokens. Update examples to match common gold formats (e.g., '2003 to 2007').
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: fede9c57 → 197345c0
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.424 | 0.487 | +0.063 | +14.9% | improved ★ |
+| avg_extraction_failures | ↓ better | 0.002 | 0.003 | +0.002 | +100.0% | worsened |
+| is_valid | ↑ better | 1 | 1 | +0 | +0.0% | no change |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,6 +1,6 @@) System prompt now enforces minimal answers and binary handling, reducing irrelevant tokens; contributing to +0.063 token F1 gain by improving precision without sacrificing recall.
+  - **[refinement]**: (@@ -19,16 +19,17 @@) Step 2's concise fact extraction (max 3 sentences) without rigid formatting improved downstream query relevance; key factor in +0.063 token F1 gain by reducing context dilution.
+  - **[refinement]**: (@@ -38,16 +39,15 @@) Step 3's stop-word-free, 3-5 word queries boosted BM25 retrieval quality; critical for +0.063 token F1 gain by providing cleaner evidence for synthesis.
+  - **[refinement]**: (@@ -69,17 +69,17 @@) Step 5's minimal contiguous phrase extraction (including necessary prepositions) matched gold spans exactly; directly drove +0.063 token F1 gain by optimizing token overlap.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 5 | **Total Programs**: 109
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 2 | 0.679 | 0.665 | 0.651 | 83.3% | 6 | 4.00 | 9 |
+| 3 | 0.695 | 0.534 | 0.316 | 87.5% | 24 | 0.92 | 5 |
+| 4 | 0.664 | 0.559 | 0.344 | 81.8% | 22 | 1.18 | 5 |
+| 5 ← | 0.722 | 0.541 | 0.264 | 73.1% | 26 | 0.69 | 6 |
+| 6 | 0.716 | 0.576 | 0.310 | 83.3% | 18 | 0.56 | 4 |
+| 7 | 0.722 | 0.619 | 0.464 | 90.0% | 10 | 0.20 | 1 |
+| 8 | 0.636 | 0.531 | 0.426 | 100.0% | 2 | 0.00 | 0 |
+
+---
+
+## Failure Analysis (10 of 423 failure(s) randomly sampled)
+
+### Case 1
+**Question**: Tom at the Farm starred a French Canadian actor who first received international acclaim in 2009 for what feature?
+**Expected**: I Killed My Mother
+**Predicted**: "I Killed My Mother" ("J’ai tué ma mère")
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Tom at the Farm"
+
+### Case 2
+**Question**: Still Da Baddest is the fourth studio album by American rapper Trina, following the poor chart performance, "I Got a Thang for You" featuring which American singer/songwriter, record producer, business woman, and television personality, and was born in Oakland, California?
+**Expected**: Keyshia Cole
+**Predicted**: Keyshia Cole, who is an American singer/songwriter, record producer, business woman, and television personality born in Oakland, California.
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (0/2 gold): MISSING — "Keyshia Cole", "Still da Baddest"
+
+### Case 3
+**Question**: Which Icelandic TV cast performed on the album "Nick Holiday"?
+**Expected**: LazyTown
+**Predicted**: the cast of the Nickelodeon TV series 'LazyTown'
+**Hop 1 retrieval** (1/2 gold): MISSING — "LazyTown"
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 4
+**Question**: What is the birthdate of this American actor, film director, producer, screenwriter, and singer, who starred in Nine Lives?
+**Expected**: July 26, 1959
+**Predicted**: July 29, 1973
+**Hop 1 retrieval** (0/2 gold): MISSING — "Kevin Spacey", "Nine Lives (2016 film)"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Kevin Spacey", "Nine Lives (2016 film)"
+
+### Case 5
+**Question**: Who did Timothy L. Spall portray in the film "The Enfield Haunting"?
+**Expected**: Maurice Grosse
+**Predicted**: Maurice Grosse in 'The Enfield Haunting' (2015)
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 6
+**Question**: Medfield College is a fictitious university used as the setting for several films by The Walt Disney Company, Among them are the two "Professor Brainard" movies, one is The Computer Wore Tennis Shoes is a 1969 American comedy film starring who?
+**Expected**: Kurt Russell
+**Predicted**: starring Kurt Russell, Cesar Romero, Joe Flynn and William Schallert
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 7
+**Question**: where is the Dunn memorial bridge located
+**Expected**: Albany, New York
+**Predicted**: between Albany, New York, and Rensselaer, New York
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "South Mall Arterial"
+
+### Case 8
+**Question**: Did the magazines Alt for Damerne and New England Offering have a similar focus?
+**Expected**: yes
+**Predicted**: no
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 9
+**Question**: You can buy Blues to the Bush on ebay. Who founded ebay in 1995?
+**Expected**: Pierre Omidyar
+**Predicted**: Pierre Omidyar in 1995
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Blues to the Bush"
+
+### Case 10
+**Question**: Which biblical figure is engraved upon the gem named for the son of King Lohair I?
+**Expected**: Susanna
+**Predicted**: Beor (biblical figure)
+**Hop 1 retrieval** (0/2 gold): MISSING — "Lothair Crystal", "Lotharingia"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Lothair Crystal", "Lotharingia"
+
+_Use these failure cases to identify systematic weaknesses. MISSING retrieval entries indicate the BM25 query at that hop failed to surface key supporting documents — consider improving the query generation prompt for that step. Cases where retrieval succeeded but prediction was still wrong suggest reasoning or answer extraction issues._
+

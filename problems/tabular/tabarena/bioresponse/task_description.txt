@@ -1,0 +1,24 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-bioresponse)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-21] D1 … D22 — numeric (22 columns)
+- [22] D24         numeric
+- [23] D25         numeric
+- [24] D26         numeric
+- [25-46] D29 … D50 — numeric (22 columns)
+- [47-66] D52 … D71 — numeric (20 columns)
+- [67-87] D73 … D93 — numeric (21 columns)
+- [88-162] D95 … D169 — numeric (75 columns)
+- [163-559] D171 … D567 — numeric (397 columns)
+- [560-848] D569 … D857 — numeric (289 columns)
+- [849-941] D859 … D951 — numeric (93 columns)
+- [942] D23         binary (0/1)
+- [943] D27         binary (0/1)
+- [944] D28         binary (0/1)
+- [945] D51         binary (0/1)
+- [946] D72         binary (0/1)
+- [947] D94         binary (0/1)
+- [948] D170        binary (0/1)
+- [949] D568        binary (0/1)
+- [950] D858        binary (0/1)
+- [951-1775] D952 … D1776 — binary (0/1) (825 columns)

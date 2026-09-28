@@ -1,0 +1,4 @@
+TASK — TABULAR REGRESSION (tabarena-qsar-tid-11)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-1023] FCFP6_1024_0 … FCFP6_1024_1023 — binary (0/1) (1024 columns)

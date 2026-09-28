@@ -1,0 +1,6 @@
+TASK — TABULAR REGRESSION (regression-cat-medium-0-Brazilian_houses)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-7]      numeric
+- [8-9]      binary (0/1)
+- [10]       categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4

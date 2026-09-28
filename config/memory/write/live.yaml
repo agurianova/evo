@@ -1,0 +1,23 @@
+# @package _global_
+
+memory:
+  write:
+    enabled: true
+    mode: live
+    refresh_every: 10
+    # Live refresh already persists memory throughout evolution. Re-running the
+    # full writer after the mutation cap cannot affect the finished search and
+    # can block shutdown on an expensive causal-retirement fit.
+    post_run_hook:
+      _target_: gigaevo.evolution.engine.hooks.NullPostRunHook
+
+# Live external-memory refresh. This is a write-side engine hook, not a DAG
+# pipeline concern. refresh_every counts ingestor sweeps that landed >=1
+# program. max_programs_per_sweep caps librarian ingest work per sweep.
+post_step_hook_timeout_s: 900.0
+post_step_hook:
+  _target_: gigaevo.memory.live_memory_hook.LiveMemoryRefreshHook
+  tracker: ${ref:memory.writer}
+  storage: ${ref:program_storage}
+  refresh_every: ${memory.write.refresh_every}
+  max_programs_per_sweep: 24

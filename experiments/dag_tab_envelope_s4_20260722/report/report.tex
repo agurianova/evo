@@ -1,0 +1,728 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{mathpazo}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\emergencystretch=3em
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{good}{HTML}{1A7F37}
+\definecolor{bad}{HTML}{B42318}
+\definecolor{warm}{HTML}{C9720B}
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{0.8em}{}
+\captionsetup{font=small,labelfont={bf,color=accent}}
+\newcommand{\rA}{\textcolor{accent}{replica~101}}
+\newcommand{\rB}{\textcolor{warm}{replica~202}}
+\newcommand{\rC}{\textcolor{good}{replica~303}}
+
+\lstdefinestyle{py}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!8},
+  frame=single, rulecolor=\color{gray!40}, framerule=0.4pt,
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, aboveskip=8pt, belowskip=8pt}
+\lstset{style=py}
+
+\newsavebox{\eliBox}
+\newenvironment{eli5}
+  {\par\medskip\noindent\begin{lrbox}{\eliBox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}\small}
+  {\end{minipage}\end{lrbox}\noindent\fcolorbox{accent!40}{accent!4}{\usebox{\eliBox}}\par\medskip}
+
+\input{numbers.tex}
+\input{memory_numbers.tex}
+
+\title{\color{accent}\bfseries The Capability Envelope and Memory V2 Follow-up\\
+\large Deleting death classes from \texttt{dag\_tab}'s mutation surface:\\
+can the search reach a supervised nearest-neighbour feature it could never reach before?\\
+\large (historical no-memory replicas plus one current-main memory run, california)}
+\author{GigaEvo}
+\date{2026-07-22}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+An audit of the 2026-07-21 \texttt{dag\_tab} shakedown found that across
+\priorPrograms{} mutations the search had \textbf{never once} built a
+nearest-neighbour feature --- while a single hand-written supervised kNN node scored
+0.865573~CV~$R^2$, beating every genome the search had ever produced. The diagnosis was not
+that the mutator lacked the idea but that the surface killed it: a stack of static
+AST rules, each a conservative approximation of Python semantics, rejected valid
+neighbour code for spellings rather than for behaviour. This report measures what
+happened after those rules were deleted and correctness moved to execution, with the
+own-target leakage probe left as the only hard gate. Three replicas of 100 mutants each
+were run on the identical recipe. \textbf{The capability appeared immediately and
+everywhere.} Against \priorNbrBuilt{}~/~\priorPrograms{} before, the search built
+\allNbrBuilt{} neighbour features across \allPrograms{} children, \emph{all
+\allNbrSup{} of them supervised} --- and the champion of \textbf{all
+\allChampReplicas{} of \allReplicas{} replicas} is a genome whose scoring path contains one.
+The first valid one arrives at generation~\rCNbrGenFirst{} in \rC{}. Every replica also beat
+the standing bar: best CV $R^2$ \rABestCV{}~/~\rBBestCV{}~/~\rCBestCV{} against the
+2026-07-16 reference of 0.864554 and the hand-written oracle's 0.865573, and the climbs
+transfer to the untouched test split: champion RMSE is
+\rABestRmse{}~/~\rBBestRmse{}~/~\rCBestRmse{} against the seed's \rASeedRmse{}; the best
+panel genome reaches \allPanelBestRmse{}. Two
+findings qualify the headline. First, the search did not merely call a library: the winning
+node in \rC{} implements \emph{leave-one-out} target encoding --- it requests $K{+}1$
+neighbours and masks each fit row's own index --- which is the construction the leakage
+probe demands, arrived at unprompted. Second, a residual death class remains and is now
+measurable: \allNbrMentionOnly{} children \emph{proposed} a neighbour feature in prose and
+shipped something else. Validity was \allValidPct{} over \allPrograms{} children, with
+\textbf{zero} malformed or schema-invalid documents anywhere. Because selection ran against
+CV, the obtained models were re-evaluated on the untouched test split as a panel rather than
+as a single champion (\S\ref{sec:heldout}): the CV-top ten of \emph{every} replica is
+\allPanelNbr{}/\allPanelNbr{} neighbour genomes, all \allPanelScored{} re-scored genomes beat
+the seed out of sample, and the champion beats its own replica's best neighbour-free genome
+in \allNbrGapRmseWins{} of \allReplicas{} replicas (mean RMSE gap
+\allNbrGapRmseMean{}) --- it loses
+that head-to-head in \rB{}, which we report rather than bury.
+
+\smallskip\noindent
+A follow-up run on current \texttt{main} exercises Memory V2 end to end with Gemini
+3.5 Flash as mutator and Qwen Instruct as the memory model. Its champion reaches
+\memBestCV{}~CV $R^2$ and \memBestTestRmse{} held-out RMSE; the best child that explicitly
+cites a card reaches RMSE \memExplicitBestRmse{}. The historical no-memory trajectories are
+shown as a reference envelope, not a causal ablation: the seed graph and evaluator revision
+changed. The randomized ledger itself does not show a global delivery advantage
+(\memAllDeliveredGain{} mean gain when delivered versus \memAllControlGain{} when
+withheld), but it does show useful card-driven kNN mutations on weaker parents, stable
+dynamic-MAP context, and nonzero evaluator uncertainty on every valid terminal.
+\end{abstract}
+
+\begin{eli5}
+\textbf{In plain language.} The system invents new columns for a spreadsheet, and a
+bolted-down model grades them. We knew one particular kind of column worked well --- ``look
+at the ten geographically nearest houses and average what they sold for'' --- because a
+human wrote it by hand and it beat everything the machine had found. But in two hundred
+tries the machine had never written one. It turned out we had been rejecting that kind of
+code for cosmetic reasons before ever running it: a pile of pattern-matching rules that
+tried to guess what Python code would do, guessed wrong, and threw away good ideas. We
+deleted the guessing and kept one real check --- the code must not peek at the answer for
+the row it is scoring. In three fresh runs the machine wrote that kind of column sixty-six
+times, won with it in all three runs, and worked out the anti-peeking trick by itself.
+\end{eli5}
+
+\section{The finding this run was built to test}
+
+The prior shakedown was a success on its own terms: two arms, 100 mutants each, zero
+malformed documents, a clean climb. The audit that followed asked a different question ---
+not \emph{did it improve} but \emph{what could it never have found} --- and the answer was
+specific. Re-running the same AST classifier used throughout this report over those two
+run directories:
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrr}
+\toprule
+ & pre-refactor & this run \\
+\midrule
+children evaluated                       & \priorPrograms & \allPrograms \\
+genomes computing a neighbour feature    & \textbf{\priorNbrBuilt} & \textbf{\allNbrBuilt} \\
+of those, supervised (target-aware)      & 0 & \allNbrSup \\
+genomes using the \texttt{aggregate} ABI at all & \priorNbrAgg & \allNbrAgg \\
+genomes \emph{proposing} a neighbour feature in prose & \priorNbrMention & \allNbrMention \\
+replicas whose champion contains one     & 0 & \textbf{\allChampReplicas~/~\allReplicas} \\
+\bottomrule
+\end{tabular}
+\caption{The capability gap, measured rather than remembered. Both columns are classified by
+the same detector (\S\ref{sec:detector}) over the stored genomes. The \texttt{aggregate}
+row matters because only the aggregate ABI receives \texttt{y\_fit}: a supervised neighbour
+feature is impossible without it, and before the refactor the search was barely using it.}
+\end{table}
+
+\noindent
+The hand-written control that motivated all of this scores 0.865573~CV~$R^2$ as a single
+node bolted onto the seed --- above the best genome any \texttt{dag\_tab} run had produced
+at that point (0.864554). The idea was worth more than everything the search had found, and
+the search had never tried it.
+
+\subsection{What was actually blocking it}
+
+The blocking rules were all instances of one mistake: \emph{a static approximation of Python
+semantics is wrong in both directions, and one direction is always a death class}. A rule
+that decides from the syntax tree whether a name still refers to the ABI frame, or whether a
+read is undeclared, must be conservative somewhere; wherever it was conservative in the
+rejecting direction, a valid runnable node died for a spelling. The refactor's rule was to
+delete such a check or make it strictly conservative --- never to make it cleverer --- and
+to let execution, which has the actual objects, be authoritative. Crucially, \textbf{nothing
+about target leakage was relaxed}: \texttt{assert\_split\_invariant} still perturbs every
+fit row's own target and requires that row's generated columns not move. The envelope was
+widened; the correctness gate was not.
+
+\section{Setup}
+
+All three replicas ran from the review-fix worktree
+(\texttt{fix/dag-tab-306-review-fixes-v2} at \texttt{bfa9d42c}), verified at launch by
+resolving \texttt{gigaevo.\_\_file\_\_} and \texttt{problems/dag\_tab/validate.py} inside
+that worktree. The recipe mirrors arm~B of the prior shakedown verbatim, so the only
+intended difference from the pre-refactor column above is the mutation surface itself.
+
+\begin{lstlisting}
+python -u run.py problem.name=dag_tab program_format=json_document pipeline=guided \
+  memory=none mutation=structured_diff_dag_tab \
+  mutation_operator.allowed_changes.max_nodes=10 \
+  llm=gemini35_flash llm.models.0.max_tokens=32768 \
+  +llm.structured_output_method=function_calling \
+  num_parents=1 max_mutants=100 algorithm=tabular/2d_local_ood
+\end{lstlisting}
+
+\noindent
+\texttt{memory=none} and \texttt{num\_parents=1}: no memory apparatus, no crossover, so
+every result here is attributable to the mutation operator alone. Fitness is 3-fold CV,
+the tabular default --- the same protocol the 0.848628 seed and the 0.864554 bar were
+measured under. The replicas differ only in LLM sampling; \texttt{gigaevo} has no global
+RNG seed knob, so ``replica'' means an independent draw, not a seeded variant.
+
+\subsection{How a neighbour feature is detected}
+\label{sec:detector}
+
+Counting the string \texttt{knn} would count a variable name as a capability. The detector
+parses each node's body and classifies what the code \emph{computes}: \textbf{library} if it
+imports or calls a neighbour primitive (\texttt{sklearn.neighbors}, \texttt{scipy.spatial},
+pairwise distances); \textbf{handrolled} if it computes a distance \emph{and} ranks or
+selects on it (\texttt{argsort}, \texttt{argpartition}, \texttt{searchsorted}); and
+\textbf{none} otherwise, whatever the identifiers are called. It ships with four controls
+covering both ways it could lie --- a variable named \texttt{knn} that computes a ratio, and
+an \texttt{argsort} with no distance, both of which must classify as \texttt{none}. A node is
+\emph{supervised} when it is an \texttt{aggregate} node, since only that ABI receives
+\texttt{y\_fit}. No separate reachability test is needed: \texttt{FeatureGraph.estimator\_columns}
+unions every node's \texttt{output\_cols} into the scored frame, so presence in a genome
+\emph{is} presence on the scoring path.
+
+\section{Did the search reach the capability?}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{neighbour_funnel.png}
+\caption{Left: how far along the funnel each replica got, from proposing a neighbour feature
+in prose to shipping one that survives the leakage probe. The funnel is the point --- a run
+that never mentions neighbours failed at retrieval, one that mentions and never builds failed
+at translation, one that builds and is rejected failed at the probe, and collapsing these
+into a single bar would hide which death class is still live. Right: the fitness of
+neighbour genomes (rings) against everything else (faint dots), by generation.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrrr}
+\toprule
+ & \rA & \rB & \rC \\
+\midrule
+children evaluated                    & \rAPrograms & \rBPrograms & \rCPrograms \\
+proposes a neighbour feature in prose & \rANbrMention & \rBNbrMention & \rCNbrMention \\
+uses the \texttt{aggregate} ABI       & \rANbrAgg & \rBNbrAgg & \rCNbrAgg \\
+\textbf{computes a neighbour feature} & \textbf{\rANbrBuilt} & \textbf{\rBNbrBuilt} & \textbf{\rCNbrBuilt} \\
+\quad of those, supervised            & \rANbrSup & \rBNbrSup & \rCNbrSup \\
+\quad of those, survive the probe     & \rANbrValid & \rBNbrValid & \rCNbrValid \\
+proposes but does not build           & \textcolor{bad}{\rANbrMentionOnly} & \textcolor{bad}{\rBNbrMentionOnly} & \textcolor{bad}{\rCNbrMentionOnly} \\
+first valid one at generation         & \rANbrGenFirst & \rBNbrGenFirst & \rCNbrGenFirst \\
+best neighbour genome (CV $R^2$)      & \rANbrBest & \rBNbrBest & \rCNbrBest \\
+\textbf{champion contains one}        & \textbf{\rANbrChampion} & \textbf{\rBNbrChampion} & \textbf{\rCNbrChampion} \\
+\bottomrule
+\end{tabular}
+\caption{Every replica reached the capability, and in every replica the capability won.
+Notably \emph{all} \allNbrSup{} neighbour features built anywhere were supervised: having
+been given a working aggregate ABI, the search went straight for the target rather than
+settling for neighbour-averages of the inputs.}
+\end{table}
+
+\noindent
+Two things in that table are worth separating from the headline.
+
+\emph{The rate is not marginal.} This is not one lucky child in three hundred: between
+\rBNbrBuilt{} and \rCNbrBuilt{} children per replica compute a neighbour feature, and
+\rANbrValid{}, \rBNbrValid{} and \rCNbrValid{} of them respectively survive the leakage
+probe. A capability that appears at this density in every replica is a property of the
+surface, not of the draw.
+
+\emph{One death class survives, and it is now visible.} \allNbrMentionOnly{} children
+proposed a neighbour feature in their rationale and then shipped something else. That is no
+longer the executor's doing --- these were never rejected --- so it is a failure of
+translation inside the mutator, not of the envelope. It is the obvious next target, and it
+was invisible before this run because there was nothing to compare the prose against.
+
+\section{What the winning genome actually built}
+
+The overall champion (\rC{}, \texttt{\rCBestId}, generation~\rCBestGen{}, CV~\rCBestCV{})
+carries \emph{two} supervised neighbour nodes. This is its target encoder, verbatim:
+
+\begin{lstlisting}
+X_fit = df_fit.to_numpy();  X = df.to_numpy()
+N = len(df_fit);  K = min(10, max(1, N - 1))
+
+nn = NearestNeighbors(n_neighbors=K+1)      # K+1: room to drop the row itself
+nn.fit(X_fit)
+distances, indices = nn.kneighbors(X)
+
+for i in range(len(df)):
+    if i < N:                               # a fit row: leave itself out
+        row_indices = indices[i]
+        valid_indices = row_indices[row_indices != i][:K]
+        pred[i] = y_fit[valid_indices].mean() if len(valid_indices) else y_mean
+    else:                                   # held-out row: all K neighbours
+        pred[i] = y_fit[indices[i][:K]].mean()
+
+df['fe_spatial_knn_target'] = pred
+\end{lstlisting}
+
+\noindent
+This is leave-one-out target encoding, and nothing in the prompt names it. The mutator asked
+for one extra neighbour precisely so it could discard the row's own index on the fit side,
+while using the full neighbourhood on the held-out side --- the exact asymmetry that makes
+the feature honest and that \texttt{assert\_split\_invariant} tests for. Earlier in the same
+replica, generation~2 produced a different valid solution to the same problem: a 5-fold
+\texttt{KFold} out-of-fold encoder. The search found two distinct leak-free constructions
+without being told either.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{r303_lineage_graph.png}
+\caption{\rC{} lineage, seed (left) to champion (right). Circles are nodes: blue
+\texttt{rowwise}, orange \texttt{aggregate}. Arrows are \emph{consumed} edges --- a declared
+dependency is drawn only where the child actually reads the parent's output columns. A red
+ring marks a node added or modified at that step.}
+\end{figure}
+
+\section{Did it climb?}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{ab_trajectory.png}
+\caption{Best-so-far cross-validated $R^2$ against evaluation order (left) and wall clock
+(right). The dashed red line is the 2026-07-16 reference on the pre-review code --- the bar
+this refactor had to reach without regressing. All three replicas clear it, and clear the
+hand-written kNN oracle (0.865573) as well.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrrr}
+\toprule
+ & \rA & \rB & \rC \\
+\midrule
+children evaluated (incomplete)  & \rAPrograms~(\rAIncomplete) & \rBPrograms~(\rBIncomplete) & \rCPrograms~(\rCIncomplete) \\
+valid / invalid                  & \rAValid~/~\rAInvalid & \rBValid~/~\rBInvalid & \rCValid~/~\rCInvalid \\
+validity rate                    & \rAValidPct & \rBValidPct & \rCValidPct \\
+malformed JSON / schema errors   & \textbf{\rAMalformed} & \textbf{\rBMalformed} & \textbf{\rCMalformed} \\
+run duration (min)               & \rAWall & \rBWall & \rCWall \\
+\midrule
+seed CV $R^2$                    & \rASeedCV & \rBSeedCV & \rCSeedCV \\
+best CV $R^2$                    & \rABestCV & \rBBestCV & \textbf{\rCBestCV} \\
+$\Delta$ CV $R^2$                & \textcolor{good}{\rADeltaCV} & \textcolor{good}{\rBDeltaCV} & \textcolor{good}{\rCDeltaCV} \\
+seed test RMSE                   & \rASeedRmse & \rBSeedRmse & \rCSeedRmse \\
+best test RMSE                   & \rABestRmse & \rBBestRmse & \textbf{\rCBestRmse} \\
+$\Delta$ test RMSE              & \textcolor{good}{\rADeltaRmse} & \textcolor{good}{\rBDeltaRmse} & \textcolor{good}{\rCDeltaRmse} \\
+\midrule
+valid-child CV mean $\pm$ sd     & \rAChildMean~$\pm$~\rAChildStd & \rBChildMean~$\pm$~\rBChildStd & \rCChildMean~$\pm$~\rCChildStd \\
+champion (generation)            & \texttt{\rABestId}~(\rABestGen) & \texttt{\rBBestId}~(\rBBestGen) & \texttt{\rCBestId}~(\rCBestGen) \\
+\quad nodes / depth / features   & \rABestNodes~/~\rABestDepth~/~\rABestFeats & \rBBestNodes~/~\rBBestDepth~/~\rBBestFeats & \rCBestNodes~/~\rCBestDepth~/~\rCBestFeats \\
+nodes mean / max                 & \rANodesMean~/~\rANodesMax & \rBNodesMean~/~\rBNodesMax & \rCNodesMean~/~\rCNodesMax \\
+consumed depth mean / max        & \rADepthMean~/~\rADepthMax & \rBDepthMean~/~\rBDepthMax & \rCDepthMean~/~\rCDepthMax \\
+share at depth $\geq 2$          & \rADeepPct & \rBDeepPct & \rCDeepPct \\
+\bottomrule
+\end{tabular}
+\caption{Test numbers come from \texttt{problems.dag\_tab.validate.score\_on\_test}, the
+shipped delegation path, not a re-implementation in this report. The seed scores identically
+in all three replicas, which is the sanity check that the delegated scorer is deterministic
+across runs. Children still in the pipeline at teardown are excluded from every rate rather
+than counted as failures.}
+\end{table}
+
+\noindent
+\emph{Held-out error falls in every replica.} If the newly-permitted supervised features
+were leaking the target into the CV objective, this is exactly where it would show: CV would
+climb while test RMSE stayed flat or worsened. Instead it falls from \rASeedRmse{} to
+\rABestRmse{}~/~\rBBestRmse{}~/~\rCBestRmse{}. Combined with the probe rejecting genuine
+leakage attempts (\S\ref{sec:rejections}), that is the strongest evidence available here
+that widening the envelope did not weaken the correctness gate.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{ab_quality.png}
+\caption{Validity counts, the fitness distribution over valid children, and the two
+MAP-Elites behaviour axes the archive actually filled.}
+\end{figure}
+
+\section{Held-out evaluation of the obtained models}
+\label{sec:heldout}
+
+A champion's test RMSE is the error of the winner of a ${\sim}100$-way selection against
+CV, and carries that optimism. So rather than scoring one genome per replica, the top ten
+by CV were re-fitted and scored on the untouched test split --- plus, in each replica, the
+best genome containing \emph{no} neighbour feature at all, which is the head-to-head the
+capability claim actually rests on. Every number below comes from
+\texttt{problems.dag\_tab.validate.score\_on\_test}, the shipped delegation path.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{test_panel.png}
+\caption{Left: CV $R^2$ (what selection optimised) against held-out RMSE for all
+\allPanelScored{} re-scored genomes; filled circles contain a neighbour feature, hollow
+squares do not, $\times$ is the seed. Right: per replica, the champion's test RMSE against
+that replica's best neighbour-free genome. Lower RMSE is better.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrrr}
+\toprule
+ & \rA & \rB & \rC \\
+\midrule
+genomes re-scored on test        & \rAPanelN & \rBPanelN & \rCPanelN \\
+\quad of which contain a neighbour feature & \rAPanelNbr & \rBPanelNbr & \rCPanelNbr \\
+test RMSE mean over the CV-top ten & \rAPanelRmseMean & \rBPanelRmseMean & \rCPanelRmseMean \\
+test RMSE worst in panel         & \rAPanelRmseWorst & \rBPanelRmseWorst & \rCPanelRmseWorst \\
+best test RMSE in panel          & \rAPanelTopRmse & \rBPanelTopRmse & \textbf{\rCPanelTopRmse} \\
+\quad its CV rank                & \rAPanelTopRmseCVRank & \rBPanelTopRmseCVRank & \rCPanelTopRmseCVRank \\
+CV-vs-test rank correlation ($\rho$, using $-\mathrm{RMSE}$) & \rAPanelRho & \textcolor{bad}{\rBPanelRho} & \rCPanelRho \\
+\midrule
+\multicolumn{4}{l}{\emph{best genome with NO neighbour feature}} \\
+\quad CV $R^2$ (generation)      & \rANoNbrCV~(\rANoNbrGen) & \rBNoNbrCV~(\rBNoNbrGen) & \rCNoNbrCV~(\rCNoNbrGen) \\
+\quad test RMSE                  & \rANoNbrRmse & \rBNoNbrRmse & \rCNoNbrRmse \\
+\quad champion's CV lead over it & \textcolor{good}{\rANbrGapCV} & \textcolor{good}{\rBNbrGapCV} & \textcolor{good}{\rCNbrGapCV} \\
+\quad champion's test RMSE gap (lower wins) & \textcolor{good}{\rANbrGapRmse} & \textcolor{bad}{\rBNbrGapRmse} & \textcolor{good}{\rCNbrGapRmse} \\
+\bottomrule
+\end{tabular}
+\caption{Every genome in the panel is scored by the same delegated protocol as the seed. The
+non-neighbour row is the appended best-neighbour-free genome, which is why the panel has
+\rAPanelN{} rows rather than ten.}
+\end{table}
+
+\noindent
+Three things fall out of this, and only two of them favour the headline.
+
+\emph{The CV-top is entirely a neighbour-feature top.} Across all three replicas,
+\textbf{\allPanelNbr{} of the \allPanelNbr{} CV-top-ten genomes contain a neighbour
+feature} --- ten out of ten in every replica. The best neighbour-free genome in each run
+sits at CV \rANoNbrCV{}~/~\rBNoNbrCV{}~/~\rCNoNbrCV{}, below the 0.864554 bar in two of the
+three. On the objective the search actually optimised, the capability does not merely
+appear: it dominates the top of the distribution.
+
+\emph{The gains are real out of sample, but smaller than CV suggests.} Every one of the
+\allPanelScored{} re-scored genomes beats the seed's \rASeedRmse{} RMSE on held-out data ---
+the worst anywhere is \allPanelWorstRmse{}, and the best is \allPanelBestRmse{}. So this is
+not a champion that got lucky; the whole CV-top of every run transfers. But the champion's
+held-out advantage over the best neighbour-free genome is not uniform: its RMSE gaps are
+\rANbrGapRmse{}, \rBNbrGapRmse{} and \rCNbrGapRmse{}.
+
+\emph{And in one replica the head-to-head reverses.} In \rB{} the best neighbour-free
+genome scores \rBNoNbrRmse{} RMSE against the champion's \rBBestRmse{} --- a
+\rBNbrGapRmse{} loss for the neighbour genome, despite a \rBNbrGapCV{} CV lead. The
+neighbour genome wins the head-to-head in \allNbrGapRmseWins{} of \allReplicas{} replicas,
+with mean champion gap \allNbrGapRmseMean{}. Within the top band, CV differences of
+${\sim}0.002$ simply do
+not order test reliably: the rank correlation over the panel is \rAPanelRho{},
+\rBPanelRho{} and \rCPanelRho{}, and in \rA{} the lowest test RMSE belongs to the genome
+ranked \rAPanelTopRmseCVRank{}th on CV. The honest reading is that the neighbour capability
+buys a solid gain over the seed and dominates the CV-top, and that \emph{among} strong
+genomes the CV objective is too noisy at this resolution to rank them --- which is a
+statement about the 3-fold objective, not about the capability.
+
+\section{What the rejections were made of}
+\label{sec:rejections}
+
+\begin{table}[H]\centering\small
+\input{invalid_table.tex}
+\caption{Every invalid child, bucketed by the guard that rejected it. The first row is the
+one the grammar owns and it is empty everywhere: across \allPrograms{} children, not one was
+rejected for being unparseable or schema-invalid. Every rejection was semantic.}
+\end{table}
+
+\noindent
+Total invalid across all three replicas is small enough to enumerate individually, and the
+composition is the interesting part. \textbf{The leakage probe fired three times} --- on
+children that attempted a supervised feature and got the leave-one-out construction wrong.
+That is the gate doing precisely its job: the same widening that let \allNbrBuilt{} honest
+neighbour features through also let dishonest ones be attempted, and they were caught at
+execution rather than waved through. Two more were rejected for emitting a non-numeric
+column from a clustering node, one for an unbound name in a target inverse, one for a node
+body raising at runtime, and one for removing pre-existing columns.
+
+\section{What it cost}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{ab_cost.png}
+\caption{Token budget per successful call, mutation-call latency, list-price spend, and wall
+clock per replica. All three ran \texttt{gemini-3.5-flash} at \texttt{reasoning.effort:high}
+under \texttt{service\_tier:flex}, so the latency distribution is the sum of thinking time
+and flex queueing and should not be read as a pure thinking cost.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrrr}
+\toprule
+ & \rA & \rB & \rC \\
+\midrule
+LLM calls (failed)       & \rACalls~(\rACallsFailed) & \rBCalls~(\rBCallsFailed) & \rCCalls~(\rCCallsFailed) \\
+input tokens             & \rATokIn & \rBTokIn & \rCTokIn \\
+output tokens            & \rATokOut & \rBTokOut & \rCTokOut \\
+reasoning tokens         & \rATokReason & \rBTokReason & \rCTokReason \\
+\quad per call           & \rATokReasonMean & \rBTokReasonMean & \rCTokReasonMean \\
+output mean / max        & \rATokOutMean~/~\rATokOutMax & \rBTokOutMean~/~\rBTokOutMax & \rCTokOutMean~/~\rCTokOutMax \\
+latency median / p95 (s) & \rALatMed~/~\rALatPfive & \rBLatMed~/~\rBLatPfive & \rCLatMed~/~\rCLatPfive \\
+list-price spend (USD)   & \$\rASpend & \$\rBSpend & \$\rCSpend \\
+\bottomrule
+\end{tabular}
+\caption{List-price spend at OpenRouter rates (\$1.50/\$9.00 per~M for
+\texttt{gemini-3.5-flash}); thinking tokens bill at the completion rate.
+\texttt{service\_tier:flex} discounts the actual invoice below these figures. All three
+replicas together cost \$\allSpend{} at list price over \allCalls{} successful calls.}
+\end{table}
+
+\noindent
+The 32768-token cap was never binding: the longest completion anywhere was
+\rCTokOutMax{} tokens. Running three replicas concurrently on one machine cost roughly the
+wall clock of one.
+
+\section{Memory V2 follow-up on current main}
+\label{sec:memoryv2}
+
+This follow-up is a systems run and a source of hypotheses, not a matched memory A/B.
+It used the neutral \texttt{dag\_tab\_seed}, the current aggregate-node evaluator and the
+current structured-diff surface; the three no-memory trajectories above came from
+\texttt{bfa9d42c}, with a one-node seed and an earlier evaluator. What is controlled is the
+problem, fixed CatBoost scorer, 100-mutant budget, mutation model
+(\texttt{google/gemini-3.5-flash}, high reasoning, flex tier), one-parent structured diff,
+ten-node cap and MAP-Elites recipe. Memory selection, retrieval and authoring used
+\texttt{Qwen3-235B-A22B-Instruct}. The run occupied \memWallMinutes{} minutes and made
+\memGeminiCalls{} Gemini calls (\memGeminiTokens{} tokens) plus \memQwenCalls{} memory-model
+calls (\memQwenTokens{} tokens). \texttt{memory.run\_seed=101} seeds assignment replay; it
+does not seed Gemini sampling and does not make the historical directory named
+\texttt{r101} a paired control.
+
+\subsection{Convergence and untouched-test result}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{memory_convergence.png}
+\caption{Best-so-far CV $R^2$ for the three historical no-memory Gemini 3.5 Flash replicas
+and the single current-main Memory V2 run. The right panel subtracts each run's own seed,
+which removes the initial 0.0022 score shift but cannot remove evaluator and mutation-surface
+changes. The red curve is therefore evidence that the complete memory-enabled stack climbs,
+not an estimate of memory's causal effect.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lrrrr}
+\toprule
+run & seed CV $R^2$ & best CV $R^2$ & $\Delta$ CV & best test RMSE \\
+\midrule
+historical no-memory 101 & \rASeedCV & \rABestCV & \rADeltaCV & \rABestRmse \\
+historical no-memory 202 & \rBSeedCV & \rBBestCV & \rBDeltaCV & \rBBestRmse \\
+historical no-memory 303 & \rCSeedCV & \rCBestCV & \rCDeltaCV & \rCBestRmse \\
+\textbf{Memory V2} & \memSeedCV & \textbf{\memBestCV} & \textbf{\memDeltaCV} & \textbf{\memBestTestRmse} \\
+\bottomrule
+\end{tabular}
+\caption{The test entry is the CV champion re-fitted through the shipped
+\texttt{score\_on\_test} path. Historical rows retain their original run results and are
+not revision-matched controls.}
+\end{table}
+
+The memory run stored \memProgramsStored{} programs: \memProgramsCompleted{} completed,
+\memProgramsValid{} valid, \memProgramsInvalid{} evaluated-invalid and
+\memProgramsIncomplete{} still in flight when the hard cap fired. The generation
+\memBestGeneration{} champion \texttt{\memBestId} has CV
+\memBestCV{}~$\pm$~\memBestCVStd{} and test RMSE \memBestTestRmse{}, improvements of
+\memDeltaCV{} CV $R^2$ and \memDeltaTestRmse{} RMSE over its neutral seed
+(RMSE \memSeedTestRmse{}).
+The best explicitly card-assisted genome, \texttt{\memExplicitBestId}, has slightly lower
+CV (\memExplicitBestCV{}) but lower test RMSE (\memExplicitBestRmse{}). That reversal is
+small but useful: 3-fold CV can choose the final
+increment incorrectly even when the lineage as a whole improves strongly.
+
+\subsection{What the memory system did}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{memory_dynamics.png}
+\caption{Top left: writer refreshes; the shaded band is pending evidence. Top right:
+valid randomized proposals, with the evaluator-reported standard error rather than a
+synthetic \texttt{se=0}. Bottom left: raw intention-to-treat means by parent-fitness band.
+Bottom right: assignment, post-treatment citation and validity. Explicit citation is useful
+for mechanism inspection, but only delivered-versus-withheld assignment is randomized.}
+\end{figure}
+
+The causal ledger contains \memDecisions{} decisions and \memTerminals{} terminals.
+After the cold-start/empty decisions, \memRandomized{} card proposals were randomized:
+\memDelivered{} delivered and \memControls{} withheld. The mutator explicitly grounded a
+card in \memExplicitUses{} outcomes. The final writer snapshot released
+\memEvidenceFinal{} eligible observations and retained \memPendingFinal{} administratively
+cancelled mutations as pending, not invalid.
+
+The global raw intention-to-treat result is deliberately unexciting: mean valid fitness
+gain is \memAllDeliveredGain{} under delivery and \memAllControlGain{} under a withheld
+card. This run does \emph{not} establish a global causal win for memory. There is a useful
+interaction hypothesis, however. Below parent fitness 0.865 the corresponding means are
+\memLowDeliveredGain{} and \memLowControlGain{}; at 0.875 or above both are effectively
+flat (\memHighDeliveredGain{} and \memHighControlGain{}). That agrees with the observed
+role of kNN cards: they frequently rescue weak spatial programs, while near the frontier
+most additional mutations --- guided or not --- have little room and often regress. The
+fitness bands are a post-hoc slice of one run, so this is a target for a matched replicate,
+not a confirmatory subgroup result.
+
+\begin{table}[H]\centering\small
+\input{memory_card_table.tex}
+\caption{Representative active cards. ``Cited'' means the structured mutation explicitly
+returned the delivered id; its gain is descriptive post-treatment evidence, not a
+card-level randomized effect. Sparse arms are why no per-card causal contrast is printed.
+The enriched-neighbourhood card produced two closely replicated gains of approximately
+0.0066 and 0.0062, while the out-of-fold kNN and K-means cards each produced useful
+low-fitness children.}
+\end{table}
+
+The bank ended at \memCards{} cards (\memInsightCards{} insights and
+\memProgramCards{} program exemplars) after \memCardAdds{} additions and
+\memCardUpdates{} equivalence/evidence updates. No card retired. Retirement was attempted
+but disabled in \memRetirementSweeps{} refreshes because the immediate-reward residual-scale
+posterior placed \memBoundaryMass{} mass at its configured boundary, above
+$\alpha=\memBoundaryAlpha{}$. This is conservative --- no card was silently removed on a
+bad fit --- but a 52-card bank after 100 mutations is too fast-growing for a long campaign.
+The residual-scale bounds or retirement calibration should be tuned before treating this
+bank size as healthy.
+
+\subsection{Dynamic MAP cells and evaluation uncertainty}
+
+The dynamic axes really did move. Across \memDecisions{} frozen decisions there are
+\memDynamicSchemas{} live behavior-space hashes but only \memSemanticSchemas{} stable
+semantic schema. Of \memRepeatedParents{} parents selected repeatedly,
+\memMovedParents{} changed discrete cell at least once as the bounds expanded. A concrete
+parent moved through cells $(13,9)\to(8,8)\to(7,6)\to(6,6)\to(6,5)$ without its raw behavior
+changing.
+
+That movement is safe because the posterior does \textbf{not} regress on the transient bin
+id or live dynamic-normalized coordinate. It uses the fixed
+\texttt{semantic\_normalized} coordinate; live bounds, bin and cell remain frozen audit and
+archive-locality state. The repeated-parent semantic spread is \memSemanticSpread{}, with
+\memCellErrors{} cell/coordinate alignment errors and \memCoordinateErrors{} out-of-bound
+dynamic coordinates. Archive reindexing publishes a complete cell replacement, and the
+memory snapshot copies elites and bounds under the same island lock. One decision records
+\texttt{parent\_cell\_occupied=false}: the selected parent was no longer the incumbent by
+snapshot time under steady-state concurrency, but its cell and bounds are internally
+consistent and the occupancy bit is not a posterior feature.
+
+Evaluator uncertainty also reaches the causal ledger. All \memSeMeasured{} valid terminal
+measurements carry an SE and all \memSeNonzero{} are nonzero; the plotted bars come directly
+from cross-validation fold SDs. The live process began before the final founding-card audit
+fix, so \memFoundingSeZero{} historical \texttt{cards.json} founding events still show
+\texttt{gain\_se=0}. That field did not train the Bayesian model: SQLite terminal
+measurements are authoritative and contain the nonzero values. Commit \texttt{dc952fda}
+now preserves the same uncertainty in newly authored card audit events as well.
+
+The last online choice was fit with \memEvidenceOnline{} observations; the final writer
+reached \memEvidenceFinal{} only after that choice. We therefore report ledger outcomes and
+historical context-conditional predictions, not a purported ``final posterior'' copied
+from the last decision. Replaying all \memEvidenceFinal{} rows at a fixed context is the
+right follow-up if a final card-ranking posterior is needed.
+
+\subsection{What the winning feature DAG built}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{memory_champion_dag.png}
+\caption{The champion's internal feature DAG. Four feature blocks consume raw columns
+directly. Only \texttt{neighborhood\_ratios} consumes a generated block, making the graph
+depth two. Every block is an estimator output, and the eight raw columns remain present.}
+\end{figure}
+
+\begin{table}[H]\centering\small
+\input{memory_dag_table.tex}
+\caption{All five champion nodes. Output counts sum to \memBestFeatures{} generated
+features; no target transform or raw-column drop is used.}
+\end{table}
+
+The central feature is \texttt{spatial\_neighborhood}. It fits a nearest-neighbour index on
+latitude/longitude, requests up to 65 points, removes a fitting row's own index, and emits
+target means at $k=4,16,64$, target spread at $k=16$, three density proxies and four local
+covariate means. The dependent node compares raw households with those local means and
+forms a micro-to-macro target ratio. This is the high-value path. Rotated coordinates make
+diagonal geography easier for axis-aligned trees; Haversine landmark distances encode
+proximity to LA, SF, San Diego and San Jose; demographic ratios expose household scale and
+occupancy. The latter blocks are plausible complementary signals, although fixed-city
+landmarks are California-specific and several rotations are redundant in a linear sense.
+
+The lineage explains the attribution. It climbs from \memSeedCV{} to 0.862772 with three
+rowwise geographic/demographic blocks, adds supervised spatial kNN at generation~3, then
+the ratio dependency and richer local statistics. Generation~6 explicitly cites a
+distance-ratio card; generation~7 explicitly cites
+\texttt{mem-45c42d56} to replace a single-scale target encoder with the multi-scale
+construction, gaining +0.003444 to \memExplicitBestCV{}. The generation~8 champion was
+offered \texttt{mem-9dfd62e3} but did not cite it; its +0.000516 demographic expansion came
+from intra-lineage/program guidance. Memory therefore materially shaped the winning
+lineage, but the final edge itself is correctly recorded as delivered-and-ignored, not
+credited to a card.
+
+\section{Threats to validity and known limits}
+
+\begin{itemize}
+\item \textbf{The Memory V2 comparison is historical and unmatched.} It is one current-main
+run against three older no-memory runs with a different neutral seed, evaluator and mutation
+surface. Normalizing by each seed does not repair that. A causal system-level memory effect
+requires fresh no-memory replicas on the same commit and seed graph.
+\item \textbf{Card citation is post-treatment.} The offered-versus-withheld contrast is
+randomized; ``explicitly used'' is a mutator response to seeing the card. Per-card cited
+gains and the frontier bands diagnose mechanisms but are not randomized subgroup estimates.
+\item \textbf{No matched control on unmodified \texttt{main}.} The pre-refactor column comes
+from the 2026-07-21 shakedown, which used the same recipe and the same model but a different
+code revision, and was one run rather than three. The capability gap
+(\priorNbrBuilt{}~$\to$~\allNbrBuilt{}) is far too large to be a sampling artefact, but the
+\emph{fitness} comparison across that boundary mixes the refactor with run-to-run variance.
+Three control replicas on unmodified \texttt{main} would settle it and have not been run.
+\item \textbf{The leakage probe runs on 1024 rows; production fits ${\sim}14$k.} Own-target
+invariance is verified on the first 1024 rows of \texttt{X\_train}. A dependence that only
+manifests at larger fit sizes would not be caught. This is a known, disclosed residual of the
+probe design, unchanged by this refactor.
+\item \textbf{Test RMSE is reported once, at the end, but CV $R^2$ drove selection.} With
+${\sim}100$ children per replica drawn against a CV objective, part of every CV gain is
+selection noise. Held-out RMSE is the honest number and is the one quoted in the abstract.
+\item \textbf{``Supervised'' is inferred from the ABI, not from dataflow.} A node is counted
+as supervised when it is an \texttt{aggregate} node, which is the only kind that receives
+\texttt{y\_fit}. An aggregate node that ignores its target would be over-counted. Every
+neighbour node inspected by hand did use it, but the classifier does not prove it.
+\item \textbf{California is one dataset, and a spatial one.} Nearest-neighbour features are
+unusually well-suited to geographic data. That the envelope now \emph{admits} them is a
+framework result; that they \emph{win} is a statement about california.
+\item \textbf{The reviewer verdict on the refactor is \emph{would not launch}, and these
+runs launched anyway.} The round-13 correctness review landed after the runs and reproduced
+two blocking defects, both in the same component --- literal transcription of a node's frame
+reads into its \texttt{input\_cols}. A \texttt{match}/\texttt{case} capture that rebinds the
+frame name, and a temporary column that happens to share a raw column's name, each cause a
+raw column to be added to \texttt{input\_cols}; the node is then rejected for ``removed
+pre-existing columns''. \emph{Both defects point in the false-rejection direction}: they kill
+valid runnable nodes, so they can only have narrowed the envelope measured here, never
+inflated it --- the one such rejection in this campaign appears in the invalid table. The
+capability counts are therefore a lower bound on what the refactor admits, but the refactor
+is not shippable as reviewed, and any number here may move when the two defects are fixed.
+\item \textbf{Held-out re-scoring re-fits the estimator.} The panel in
+\S\ref{sec:heldout} re-runs each graph through \texttt{score\_on\_test}, which fits on train
+and scores on test. CatBoost is seeded but not bitwise-deterministic across machines, so the
+final digit of any test figure is not meaningful.
+\end{itemize}
+
+\section{What this run establishes}
+
+\begin{enumerate}
+\item The capability gap was caused by the mutation \emph{surface}, not by the mutator.
+Nothing about the model, prompt, recipe or budget changed between
+\priorNbrBuilt{}~/~\priorPrograms{} and \allNbrBuilt{}~/~\allPrograms{} neighbour features ---
+only the removal of static rules that rejected valid code before it ran.
+\item Widening the envelope did not weaken the correctness gate. The leakage probe fired on
+three genuine attempts, held-out RMSE decreased in every replica, and the winning genome
+independently implemented leave-one-out encoding to satisfy a probe it was never shown.
+\item The capability translates into fitness, and survives held-out re-scoring. All
+\allChampReplicas{} champions contain a supervised neighbour feature, the CV-top ten of every
+replica is entirely neighbour genomes, all three replicas cleared both the 0.864554 standing
+bar and the 0.865573 hand-written oracle, and every one of the \allPanelScored{} re-scored
+genomes beats the seed on the untouched test split (best RMSE \allPanelBestRmse{}). The
+neighbour-versus-no-neighbour head-to-head goes \allNbrGapRmseWins{}--1 on test with mean
+RMSE gap \allNbrGapRmseMean{}, so the capability's advantage over strong neighbour-free genomes is
+real but not yet separated from noise by three replicas.
+\item A residual death class is now measured rather than suspected:
+\allNbrMentionOnly{} children proposed a neighbour feature in prose and shipped something
+else. That failure lives inside the mutator, not the envelope, and is the next thing to fix.
+\item The current-main Memory V2 stack completed a full 100-mutant campaign with stable
+dynamic-MAP context and evaluator uncertainty in every usable Bayesian outcome. Its winning
+lineage uses cards to build the multi-scale nearest-neighbour path and reaches
+\memBestTestRmse{} held-out RMSE (best explicitly assisted genome
+\memExplicitBestRmse{}).
+The randomized ledger does not support a global memory-win claim, and the non-retiring,
+fast-growing card bank is the clearest operational issue exposed by the run.
+\end{enumerate}
+
+\end{document}

@@ -1,0 +1,34 @@
+TASK — TABULAR MULTICLASS CLASSIFICATION (tabarena-splice, 3 classes)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] position_-30 categorical (integer code), 5 levels: 0=A 1=C 2=D 3=G 4=T
+- [1] position_-29 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [2] position_-28 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [3] position_-27 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [4] position_-26 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [5] position_-25 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [6] position_-24 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [7] position_-23 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [8] position_-22 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [9] position_-21 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [10] position_-20 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [11] position_-19 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [12] position_-18 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [13] position_-17 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [14] position_-16 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [15] position_-15 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [16] position_-14 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [17] position_-13 categorical (integer code), 4 levels: 0=A 1=C 2=G 3=T
+- [18] position_-12 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [19] position_-11 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [20] position_-10 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [21] position_-9 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [22] position_-8 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [23] position_-7 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [24] position_-6 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [25] position_-5 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [26] position_-4 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [27] position_-3 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [28] position_-2 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [29] position_-1 categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T
+- [30-59] position_1 … position_30 — categorical (integer code), 5 levels: 0=A 1=C 2=G 3=N 4=T (30 columns)

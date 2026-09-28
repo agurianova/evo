@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from pydantic import ValidationError
+import pytest
+
+from gigaevo.llm.agents.card_author import AuthoredCard
+from gigaevo.llm.agents.factories import create_program_author_agent
+from gigaevo.llm.agents.program_author import ProgramAuthorResponse
+from gigaevo.llm.schema_compat import nonportable_keys
+from gigaevo.memory.write.decisions import WriteDecision
+
+
+class FakeStructuredLlm:
+    def __init__(self, response: ProgramAuthorResponse) -> None:
+        self.response = response
+        self.calls: list = []
+
+    async def ainvoke(self, messages):
+        self.calls.append(messages)
+        return self.response
+
+
+class FakeLlm:
+    def __init__(self, response: ProgramAuthorResponse) -> None:
+        self.structured = FakeStructuredLlm(response)
+
+    def with_structured_output(self, schema, **kwargs):
+        assert schema["title"] == "ProgramAuthorResponse"
+        assert nonportable_keys(schema) == set()
+        return self.structured
+
+
+@pytest.mark.asyncio
+async def test_program_author_returns_one_holistic_hypothesis() -> None:
+    expected = ProgramAuthorResponse(
+        decision=WriteDecision.NEW,
+        card=AuthoredCard(
+            description="When a constructive seed is brittle, try a guarded local "
+            "search because feasible swaps refine it without restarting.",
+            explanation_summary="The seed reaches a useful basin and guarded swaps "
+            "exploit it while retaining feasibility.",
+        ),
+    )
+    llm = FakeLlm(expected)
+    agent = create_program_author_agent(
+        llm,
+        task_description="task",
+        metrics_description=(
+            '- loss: validation loss (↓ better; [0.0, 1.0] range; unit="nats")'
+        ),
+    )
+
+    result = await agent.arun(
+        code="def solve(): ...",
+        fitness=0.53,
+        higher_is_better=False,
+        archive_rank=2,
+    )
+
+    assert result == expected
+    rendered = str(llm.structured.calls[0])
+    assert "0.53" in rendered
+    assert "lower is better" in rendered
+    assert "2" in rendered
+    assert "validation loss" in rendered
+    assert "[0.0, 1.0] range" in rendered
+    assert 'unit="nats"' in rendered
+
+
+@pytest.mark.asyncio
+async def test_program_author_can_drop_uninformative_program() -> None:
+    expected = ProgramAuthorResponse(decision=WriteDecision.DROP, card=None)
+    agent = create_program_author_agent(
+        FakeLlm(expected),
+        task_description="task",
+        metrics_description="- score: objective (↑ better)",
+    )
+    assert (
+        await agent.arun(
+            code="pass",
+            fitness=None,
+            higher_is_better=True,
+            archive_rank=None,
+        )
+    ).decision is WriteDecision.DROP
+
+
+def test_program_author_schema_excludes_equivalence() -> None:
+    schema = ProgramAuthorResponse.model_json_schema()
+    decision_schema = schema["properties"]["decision"]
+    assert decision_schema["enum"] == ["DROP", "NEW"]
+    assert set(schema["required"]) == {"decision", "card"}
+    with pytest.raises(ValidationError):
+        ProgramAuthorResponse(decision=WriteDecision.EQUIVALENT, card=None)

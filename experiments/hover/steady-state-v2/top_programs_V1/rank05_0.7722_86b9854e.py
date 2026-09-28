@@ -1,0 +1,76 @@
+def entrypoint():
+    return {
+        "system_prompt": "You are an evidence specialist focused on verifying claims. Your role is to identify and retrieve supporting evidence from Wikipedia. When generating search queries, output ONLY the query string with no additional text, examples, or explanations.",
+        "steps": [
+            {
+                "number": 1,
+                "title": "Generate optimized first-hop query",
+                "step_type": "llm",
+                "aim": "Generate a comprehensive initial search query to maximize recall of relevant evidence.",
+                "stage_action": "Generate a comprehensive search query for the initial evidence retrieval. Include alternative phrasings and related terms to maximize recall. Output ONLY the query string with no additional text.",
+                "reasoning_questions": "What are the key entities and relationships in the claim? What alternative terms or phrasings might appear in relevant articles?",
+                "example_reasoning": "Example: 'climate change effects on polar bears habitat loss'",
+                "dependencies": [],
+            },
+            {
+                "number": 2,
+                "title": "Retrieve first-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [1],
+            },
+            {
+                "number": 3,
+                "title": "Generate second-hop query",
+                "step_type": "llm",
+                "aim": "Generate a recall-focused query for the second hop based on first-hop evidence.",
+                "stage_action": "Review the first-hop passages to identify missing evidence. Generate a search query that includes alternative phrasings to maximize recall for the missing information. Output ONLY the query string.",
+                "reasoning_questions": "What specific information is still missing? Which entities or relationships need verification? What alternative terms might be used in Wikipedia?",
+                "example_reasoning": "Example: 'effects of climate change on Arctic ecosystems polar bear population decline'",
+                "dependencies": [2],
+            },
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+            },
+            {
+                "number": 5,
+                "title": "Combine evidence and identify gaps",
+                "step_type": "llm",
+                "aim": "Synthesize evidence from both hops and enumerate specific remaining gaps.",
+                "stage_action": "Integrate the evidence from the first-hop and second-hop passages. Produce a comprehensive summary of verified facts. Then, list SPECIFIC missing evidence required to fully verify the claim. Format gaps as numbered items.",
+                "reasoning_questions": "What has been verified so far? What precise information is still missing? Which gaps are critical for verification?",
+                "example_reasoning": "Combined summary: Claim partially verified by X and Y.\nGaps:\n1. Missing evidence for Z\n2. No information about W",
+                "dependencies": [2, 4],
+            },
+            {
+                "number": 6,
+                "title": "Generate third-hop query",
+                "step_type": "llm",
+                "aim": "Generate a precise query for the most critical remaining gap.",
+                "stage_action": "Based on the enumerated gaps, select the highest-priority missing evidence. Write a concise search query targeting ONLY this gap with high precision. Output ONLY the search query, no additional text.",
+                "reasoning_questions": "Which gap is most critical for verification? How can we formulate the most precise query for this gap?",
+                "example_reasoning": "Example: evidence for Z",
+                "dependencies": [5],
+            },
+            {
+                "number": 7,
+                "title": "Retrieve third-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [6],
+            },
+        ],
+    }

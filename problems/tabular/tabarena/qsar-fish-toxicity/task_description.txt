@@ -1,0 +1,9 @@
+TASK — TABULAR REGRESSION (tabarena-qsar-fish-toxicity)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] CIC0        numeric
+- [1] SM1_Dz(Z)   numeric
+- [2] GATS1i      numeric
+- [3] NdsCH       numeric
+- [4] NdssC       numeric
+- [5] MLOGP       numeric

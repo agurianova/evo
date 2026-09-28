@@ -1,0 +1,389 @@
+schema_version: 2
+contract:
+  identity:
+    name: hover/prompt_coevolution
+    task: hover
+    branch: exp/hover-prompt-coevolution
+    prereg_commit: baee9bd
+    pr_number: 93
+    tracking_issue: 94
+  problem:
+    has_test_set: true
+    test_set_path: problems/chains/hover/static_soft/test.py
+    test_set_sha256: b8d193b04ac4a6662642bafd2c21645feb06b7e3e3095e0f4af8a58493fda6e3
+    max_val_test_gap: null
+    fitness_type: fractional
+    metric_name: retrieval_coverage
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.003
+  runs:
+  - label: C1
+    db: 9
+    prefix: chains/hover/static_soft
+    pipeline: guided
+    problem_name: chains/hover/static_soft
+    condition: 'Treatment: soft fitness + co-evolved prompts'
+    chain_url: http://10.226.17.25:8001/v1
+    mutation_url: http://10.226.72.211:8777/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 420175
+    log_path: run_C1.log
+    extra_overrides:
+    - prompt_fetcher=coevolved
+    - prompt_fetcher.prompt_redis_db=11
+    - prompt_fetcher.prompt_prefix=prompt_evolution_hover
+  - label: C2
+    db: 10
+    prefix: chains/hover/static_soft
+    pipeline: guided
+    problem_name: chains/hover/static_soft
+    condition: 'Treatment: soft fitness + co-evolved prompts'
+    chain_url: http://10.225.185.235:8001/v1
+    mutation_url: http://10.226.15.38:8777/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 420176
+    log_path: run_C2.log
+    extra_overrides:
+    - prompt_fetcher=coevolved
+    - prompt_fetcher.prompt_redis_db=12
+    - prompt_fetcher.prompt_prefix=prompt_evolution_hover
+  - label: P1
+    db: 11
+    prefix: prompt_evolution_hover
+    pipeline: prompt_evolution
+    problem_name: prompt_evolution_hover
+    condition: Prompt evolution run paired with C1
+    chain_url: null
+    mutation_url: http://10.226.185.47:8777/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 420177
+    log_path: run_P1.log
+    extra_overrides:
+    - main_redis_db=9
+    - main_redis_prefix=chains/hover/static_soft
+    - max_elites_per_generation=5
+    - max_mutations_per_generation=2
+  - label: P2
+    db: 12
+    prefix: prompt_evolution_hover
+    pipeline: prompt_evolution
+    problem_name: prompt_evolution_hover
+    condition: Prompt evolution run paired with C2
+    chain_url: null
+    mutation_url: http://10.225.51.251:8777/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 420178
+    log_path: run_P2.log
+    extra_overrides:
+    - main_redis_db=10
+    - main_redis_prefix=chains/hover/static_soft
+    - max_elites_per_generation=5
+    - max_mutations_per_generation=2
+  servers:
+  - 10.226.17.25
+  - 10.225.185.235
+  - 10.226.72.211
+  - 10.226.15.38
+  - 10.226.185.47
+  - 10.225.51.251
+  custom_env:
+    HOVER_CHAIN_URL: per-run
+  max_generations: 25
+  stopping_rule:
+    description: ''
+    conditions: []
+    enforce_at: checkpoint
+  baseline:
+    reference: hover/feedback_softfit
+    mean: 54.37
+    metric: test_retrieval_coverage_discrete
+  tools:
+  - name: run_test_eval.sh
+    purpose: 5-repeat discrete test evaluation
+  - name: run_watchdog.py
+    purpose: Status updates, model drift detection
+lifecycle:
+  status: complete
+  launch:
+    attempt: 13
+    time: '2026-03-21T19:56:16.927091+00:00'
+    commit: 5a9c2fdaed182060afd9e7dff36a43df2bb975bc
+    confirmed_at: '2026-03-21T19:56:16.952097+00:00'
+  smoke_test:
+    completed: true
+    db: 9
+    generations: 3
+    log_path: smoke_C1.log
+    completed_at: '2026-03-20T19:34:00Z'
+  treatment_verification: {}
+telemetry:
+  checkpoints:
+  - gen: 2
+    timestamp: '2026-03-21T10:36:52.877152+00:00'
+    run_metrics:
+    - label: C1
+      gen: 3
+      best_fitness: 0.0
+    - label: C2
+      gen: 2
+      best_fitness: 0.0
+    - label: P1
+      gen: 3
+      best_fitness: 0.0
+    - label: P2
+      gen: 3
+      best_fitness: 0.0
+    notes: Early checkpoint — all runs alive, C runs at 74-77%, P runs at prior (0.25). Too early for treatment checks.
+  - gen: 2
+    timestamp: '2026-03-21T13:25:51.514825+00:00'
+    run_metrics:
+    - label: C1
+      gen: 2
+      best_fitness: 0.7422222222222222
+    - label: C2
+      gen: 2
+      best_fitness: 0.7333333333333333
+    - label: P1
+      gen: 2
+      best_fitness: 0.25
+    - label: P2
+      gen: 3
+      best_fitness: 0.25
+    notes: Attempt 8 — freshly launched with min_trials=3. Too early for analysis.
+  - gen: 5
+    timestamp: '2026-03-21T16:59:43.710097+00:00'
+    run_metrics:
+    - label: C1
+      gen: 4
+      best_fitness: 0.7922222222222222
+    - label: C2
+      gen: 5
+      best_fitness: 0.7577777777777778
+    - label: P1
+      gen: 7
+      best_fitness: 0.5
+    - label: P2
+      gen: 7
+      best_fitness: 0.5
+    notes: All runs healthy. C1=79.2% C2=75.8% at gen 4-5. P1/P2=50% at gen 6-7, not stuck (3 distinct values). Diagnose.py false positives fixed.
+  - gen: 8
+    timestamp: '2026-03-21T18:16:10.183031+00:00'
+    run_metrics:
+    - label: C1
+      gen: 6
+      best_fitness: 0.7922222222222222
+    - label: C2
+      gen: 7
+      best_fitness: 0.77
+    - label: P1
+      gen: 10
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 11
+      best_fitness: 0.5
+    notes: All healthy. C1=79.2% gen6, C2=77.0% gen7. P1=57.1% gen10, P2=50.0% gen11. No CRITICAL/MAJOR findings.
+  - gen: 10
+    timestamp: '2026-03-21T19:37:05.508011+00:00'
+    run_metrics:
+    - label: C1
+      gen: 7
+      best_fitness: 0.7922222222222222
+    - label: C2
+      gen: 8
+      best_fitness: 0.77
+    - label: P1
+      gen: 12
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 14
+      best_fitness: 0.5
+    notes: C1 slow gen (86min gap, 61% invalid) — expected for this chain server. C2/P1/P2 healthy. No CRITICAL.
+  - gen: 6
+    timestamp: '2026-03-21T21:37:06.185532+00:00'
+    run_metrics:
+    - label: C1
+      gen: 5
+      best_fitness: 0.7566666666666666
+    - label: C2
+      gen: 6
+      best_fitness: 0.77
+    - label: P1
+      gen: 6
+      best_fitness: 0.4
+    - label: P2
+      gen: 7
+      best_fitness: 0.4
+    notes: All runs healthy and synced. C1=75.7% gen5, C2=77.0% gen6. P1=40% gen6, P2=40% gen7. Feedback loop active (prompt_stats in C DBs). P fitness stagnation at 0.40 is expected — too few trials per prompt for differentiation.
+  - gen: 9
+    timestamp: '2026-03-21T23:36:35.242971+00:00'
+    run_metrics:
+    - label: C1
+      gen: 8
+      best_fitness: 0.7688888888888888
+    - label: C2
+      gen: 9
+      best_fitness: 0.7755555555555556
+    - label: P1
+      gen: 9
+      best_fitness: 0.3333333333333333
+    - label: P2
+      gen: 10
+      best_fitness: 0.5
+    notes: C1=76.9% gen8, C2=77.6% gen9 — both improving. P1=33.3% gen9, P2=50.0% gen10 — synced. 0 CRITICAL. Val duration increasing (~1800-2400s) but within dag_timeout.
+  - gen: 12
+    timestamp: '2026-03-22T01:35:59.528378+00:00'
+    run_metrics:
+    - label: C1
+      gen: 11
+      best_fitness: 0.7688888888888888
+    - label: C2
+      gen: 12
+      best_fitness: 0.7755555555555556
+    - label: P1
+      gen: 12
+      best_fitness: 0.2857142857142857
+    - label: P2
+      gen: 13
+      best_fitness: 0.45454545454545453
+    notes: C1=76.9% gen11, C2=77.6% gen12. P1/P2 synced at gen12/13. C fitness plateauing — no improvement since gen5/gen4. Val durations 1500-2800s. Will run test eval at next checkpoint (>50%).
+  - gen: 15
+    timestamp: '2026-03-22T03:36:22.104090+00:00'
+    run_metrics:
+    - label: C1
+      gen: 14
+      best_fitness: 0.7688888888888888
+    - label: C2
+      gen: 15
+      best_fitness: 0.78
+    - label: P1
+      gen: 15
+      best_fitness: 0.4
+    - label: P2
+      gen: 16
+      best_fitness: 0.46153846153846156
+    notes: C1=76.9% gen14, C2=78.0% gen15 (C2 new high +0.4pp). P1/P2 synced gen14/16. 0 CRITICAL. Test eval deferred to closeout to avoid chain server contention.
+  - gen: 18
+    timestamp: '2026-03-22T05:36:11.642893+00:00'
+    run_metrics:
+    - label: C1
+      gen: 16
+      best_fitness: 0.7688888888888888
+    - label: C2
+      gen: 19
+      best_fitness: 0.78
+    - label: P1
+      gen: 17
+      best_fitness: 0.4
+    - label: P2
+      gen: 20
+      best_fitness: 0.46153846153846156
+    notes: C1=76.9% gen16, C2=78.0% gen19. P1 gen17, P2 gen20 — synced. C2 approaching completion (76%). C1 slower chain server (~3000s/gen). Fitness plateaued for both C runs. 0 CRITICAL.
+  - gen: 21
+    timestamp: '2026-03-22T07:36:08.399095+00:00'
+    run_metrics:
+    - label: C1
+      gen: 19
+      best_fitness: 0.7833333333333333
+    - label: C2
+      gen: 22
+      best_fitness: 0.78
+    - label: P1
+      gen: 20
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 23
+      best_fitness: 0.46153846153846156
+    notes: C1=78.3% gen19 (new high, broke plateau), C2=78.0% gen22 (3 gens left). P1=57.1% gen20, P2=46.2% gen22. C2/P2 nearing completion. 0 CRITICAL.
+  - gen: 21
+    timestamp: '2026-03-22T07:39:44.291113+00:00'
+    run_metrics:
+    - label: C1
+      gen: 19
+      best_fitness: 0.7833333333333333
+    - label: C2
+      gen: 22
+      best_fitness: 0.78
+    - label: P1
+      gen: 20
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 23
+      best_fitness: 0.46153846153846156
+    notes: C1=78.3% gen19 (still computing gen20), C2=78.0% gen22 (3 gens left), P2=gen23. C2/P2 approaching max_gen. Minimal change from last checkpoint — C1 chain server slow (~45min/gen).
+  - gen: 24
+    timestamp: '2026-03-22T11:04:33.352532+00:00'
+    run_metrics:
+    - label: C1
+      gen: 23
+      best_fitness: 0.7833333333333333
+    - label: C2
+      gen: 25
+      best_fitness: 0.78
+    - label: P1
+      gen: 24
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 25
+      best_fitness: 0.46153846153846156
+    notes: C2+P2 complete (25/25). C1 at 23, P1 at 24. Waiting for completion before test eval.
+  - gen: 25
+    timestamp: '2026-03-22T13:47:38.960101+00:00'
+    run_metrics:
+    - label: C1
+      gen: 25
+      best_fitness: 0.7833333333333333
+    - label: C2
+      gen: 25
+      best_fitness: 0.78
+    - label: P1
+      gen: 25
+      best_fitness: 0.5714285714285714
+    - label: P2
+      gen: 25
+      best_fitness: 0.46153846153846156
+    notes: 'Final checkpoint. Test eval: C1=52.93%, C2=51.07%. Verdict: NULL/REGRESSIVE.'
+  mid_run_test_eval:
+    completed: true
+    completed_at: '2026-03-22T13:47:22.686282+00:00'
+    results:
+      C1:
+        mean: 0.5293
+        std: 0.0101
+        scores:
+        - 0.5167
+        - 0.53
+        - 0.5333
+        - 0.5433
+        - 0.5233
+      C2:
+        mean: 0.5107
+        std: 0.0104
+        scores:
+        - 0.52
+        - 0.4967
+        - 0.52
+        - 0.5133
+        - 0.5033
+  checkpoint_analysis: {}
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 420875
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

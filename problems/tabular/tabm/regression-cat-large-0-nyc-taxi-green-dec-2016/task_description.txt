@@ -1,0 +1,9 @@
+TASK — TABULAR REGRESSION (regression-cat-large-0-nyc-taxi-green-dec-2016)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-8]      numeric
+- [9-11]     binary (0/1)
+- [12]       categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4
+- [13]       categorical (integer code), 4 levels: 0=0 1=2 2=3 3=4
+- [14]       categorical (integer code), 2 levels: 0=1 1=2
+- [15]       categorical (integer code), 2 levels: 0=1 1=2

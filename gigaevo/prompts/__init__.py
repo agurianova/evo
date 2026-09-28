@@ -1,0 +1,181 @@
+"""Prompt template loading utilities.
+
+All prompts are stored as plain text files organized by agent type.
+Prompts use .format() syntax for variable substitution.
+
+When prompts_dir is given, that directory is tried first; if the file is missing
+there, the package default directory is used.
+"""
+
+from pathlib import Path
+
+from loguru import logger
+
+_PROMPTS_DIR = Path(__file__).parent
+
+
+def load_prompt(
+    agent_name: str,
+    prompt_type: str,
+    prompts_dir: str | Path | None = None,
+) -> str:
+    """Load a prompt template from file.
+
+    Tries prompts_dir first (if given); if the file is not there, loads from
+    the package default directory.
+
+    Args:
+        agent_name: Agent type directory (insights, lineage, mutation, mutation_suggestions)
+        prompt_type: Prompt file type (system, user)
+        prompts_dir: Optional directory for prompts (e.g. config.prompts.dir).
+            Same layout as package: subdirs per agent with system.txt / user.txt.
+
+    Returns:
+        Template string for .format() substitution
+
+    Example:
+        >>> system = load_prompt("insights", "system")
+        >>> user = load_prompt("insights", "user", prompts_dir="/custom/prompts")
+    """
+
+    if prompts_dir is not None:
+        custom_path = Path(prompts_dir) / agent_name / f"{prompt_type}.txt"
+        if custom_path.exists():
+            text = custom_path.read_text().strip()
+            logger.debug(
+                "[prompts] Loaded {}/{} from custom dir: {} ({} chars)",
+                agent_name,
+                prompt_type,
+                custom_path,
+                len(text),
+            )
+            return text
+        logger.debug(
+            "[prompts] Custom {}/{} not found at {}, falling back to package defaults",
+            agent_name,
+            prompt_type,
+            custom_path,
+        )
+    prompt_path = _PROMPTS_DIR / agent_name / f"{prompt_type}.txt"
+    if not prompt_path.exists():
+        raise FileNotFoundError(
+            f"Prompt not found: {prompt_path}\nLooking in: {_PROMPTS_DIR / agent_name}"
+        )
+    text = prompt_path.read_text().strip()
+    logger.debug(
+        "[prompts] Loaded {}/{} from package defaults: {} ({} chars)",
+        agent_name,
+        prompt_type,
+        prompt_path,
+        len(text),
+    )
+    return text
+
+
+# Simple accessors for common prompts
+class InsightsPrompts:
+    """Insights agent prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for insights analysis."""
+        return load_prompt("insights", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for insights analysis."""
+        return load_prompt("insights", "user", prompts_dir=prompts_dir)
+
+
+class LineagePrompts:
+    """Lineage agent prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for lineage analysis."""
+        return load_prompt("lineage", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for lineage analysis."""
+        return load_prompt("lineage", "user", prompts_dir=prompts_dir)
+
+
+class MutationSuggestionsPrompts:
+    """Mutation-suggestion analyst prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for mutation-suggestion analysis."""
+        return load_prompt("mutation_suggestions", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for mutation-suggestion analysis."""
+        return load_prompt("mutation_suggestions", "user", prompts_dir=prompts_dir)
+
+
+class CardAuthorPrompts:
+    """Mutation-outcome card author prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        return load_prompt("card_author", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        return load_prompt("card_author", "user", prompts_dir=prompts_dir)
+
+
+class EquivalencePrompts:
+    """Strict authored-card equivalence prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        return load_prompt("equivalence", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        return load_prompt("equivalence", "user", prompts_dir=prompts_dir)
+
+
+class AdmissionNoveltyPrompts:
+    """Librarian novelty-admission judge prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for the novelty-admission (keep/reject) hop."""
+        return load_prompt("admission_novelty", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for the novelty-admission hop."""
+        return load_prompt("admission_novelty", "user", prompts_dir=prompts_dir)
+
+
+class ProgramAuthorPrompts:
+    """Librarian program-author agent prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for the exemplar program-author hop."""
+        return load_prompt("program_author", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for the program-author hop."""
+        return load_prompt("program_author", "user", prompts_dir=prompts_dir)
+
+
+class TaskSummaryPrompts:
+    """Librarian task-summary agent prompt templates."""
+
+    @staticmethod
+    def system(prompts_dir: str | Path | None = None) -> str:
+        """System prompt for the one-line task-summary hop."""
+        return load_prompt("task_summary", "system", prompts_dir=prompts_dir)
+
+    @staticmethod
+    def user(prompts_dir: str | Path | None = None) -> str:
+        """User prompt template for the task-summary hop."""
+        return load_prompt("task_summary", "user", prompts_dir=prompts_dir)

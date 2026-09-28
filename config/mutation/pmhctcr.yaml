@@ -1,0 +1,9 @@
+# @package _global_
+# JSON genotype operators (TZ v2). LLM proposes one operator via
+# MutationSuggestionStage; PmhctcrMutationOperator patches GENOTYPE_JSON
+# then render_program() emits the Python child (no free rewrite).
+
+mutation_operator:
+  _target_: problems.pmhctcr.mutation_operator.PmhctcrMutationOperator
+  fitness_key: fitness
+  higher_is_better: true

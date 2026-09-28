@@ -1,0 +1,5 @@
+TASK — TABULAR BINARY CLASSIFICATION (ecom-offers)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-112]    numeric
+- [113-118]  binary (0/1)

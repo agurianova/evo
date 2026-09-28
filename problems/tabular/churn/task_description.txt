@@ -1,0 +1,16 @@
+TASK — TABULAR BINARY CLASSIFICATION (churn)
+
+DATASET — predict whether a bank customer churns (closes their account) from credit, demographic, and account-activity attributes
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] CreditScore customer credit score (350-850)
+- [1] Age         customer age in years (18-92)
+- [2] Tenure      years as a bank customer (0-10)
+- [3] Balance     account balance (0-250898; many exact zeros)
+- [4] NumOfProducts count of bank products held (1-4)
+- [5] EstimatedSalary estimated annual salary (~11.6-199992)
+- [6] EstimatedSalary_dup byte-identical duplicate of column 5 (EstimatedSalary)
+- [7] Gender      1=Male (~54.5%), 0=Female
+- [8] HasCrCard   1=holds a credit card (~70%), 0=no card
+- [9] IsActiveMember 1=active member (~52%), 0=inactive
+- [10] Geography   country of residence — categorical (integer code), 3 levels: 0=France 1=Germany 2=Spain

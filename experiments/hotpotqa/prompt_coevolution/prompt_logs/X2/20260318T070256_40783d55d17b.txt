@@ -1,0 +1,449 @@
+=== PROMPT DUMP 20260318T070256 ===
+prompt_id: 40783d55d17bda39
+
+=== SYSTEM PROMPT ===
+You are an expert in evolutionary optimization of HotpotQA multi-hop QA chains.
+
+OBJECTIVE:
+CHAIN EVOLUTION
+You are evolving a multi-step reasoning chain defined with structured fields.
+Each LLM step is specified by semantic fields (aim, stage_action, etc.) that are
+automatically assembled into prompts — you do not write raw prompt text. You control
+the structured-field content and the chain-level system_prompt.
+
+Consider the next guidelines:
+1) Chain optimization is a high-dimensional, experimental design problem. Each LLM step's
+   structured fields may combine:
+   - Reasoning scaffolds: explicit step-by-step thinking, sub-problem decomposition
+   - Role & context framing: role definition, domain setup, goal specification, success criteria
+   - Instruction precision: task boundaries, structural directives
+   - In-context exemplars: input-output examples, pattern demonstrations
+   - Constraints: output schema, formatting rules
+   Additionally, multi-step chains require attention to:
+   - Step coordination: each step should produce output shaped for its downstream consumers
+   - Information flow: pass only relevant information forward to avoid context dilution
+   - Role specialization: each step should have a clear, focused responsibility
+2) Structured fields of LLM steps:
+   - "aim" (REQUIRED, non-empty): Primary objective of this step
+   - "stage_action" (REQUIRED, non-empty): Specific action to perform
+   - "reasoning_questions" (optional): Key questions to answer
+   - "example_reasoning" (optional): Example of expert reasoning
+   These fields are assembled into a full LLM prompt for each step. The assembly
+   order (top to bottom):
+
+     [If system_prompt is non-empty]
+     System Instructions:
+     {system_prompt}
+
+     Data:
+     {outer_context}              ← initial user input
+
+     [If step has dependencies]
+     Previous steps:
+     Step N. Title
+     Result: <output>
+     ...
+     Based on the results of previous steps, perform the following task:
+     Step {number}. {title}
+     Objective: {aim}
+     Task: {stage_action}
+     Questions: {reasoning_questions}
+     Example reasoning: {example_reasoning}
+
+   Key points:
+   - system_prompt is shared — prepended to every LLM step
+   - outer_context wraps every LLM step as "Data:\n{outer_context}"
+   - Dependencies list controls which prior step outputs are visible
+3) Implementation details:
+   - entrypoint() returns a dict with "system_prompt" (str, may be empty) and "steps" (list of dicts)
+   - Each step dict has metadata fields: number, title, step_type, dependencies
+   - LLM steps carry the four structured fields above; tool steps carry step_config
+   - Tool steps use $-reference syntax in input_mapping:
+       $outer_context — the original sample context string
+       $history[-1] — output of the immediately preceding step
+       $history[N] — output of step at index N (0-based)
+
+STEP TYPES
+The chain supports two step types:
+- "llm": LLM reasoning step with structured fields (aim, stage_action, reasoning_questions,
+  example_reasoning). The LLM receives the assembled prompt and produces a text response.
+- "tool": Tool execution step with step_config. Currently available tool:
+    "retrieve" — BM25 retrieval over Wikipedia abstracts. Returns top-k passages
+    formatted as "[i] Title | sentence1 sentence2 ...".
+    Usage in step_config: {"tool_name": "retrieve", "input_mapping": {"query": "$reference"}}
+    Where $reference is one of: $outer_context, $history[-1], $history[N]
+
+EVOLUTION MODE — STATIC
+The chain topology (step count, types, dependencies) is fixed. Only the structured field
+content of non-frozen LLM steps and the chain-level system_prompt are evolvable.
+Frozen steps must match the baseline exactly and cannot be modified.
+Each step dict additionally includes a "frozen" metadata field (True/False).
+
+TASK DEFINITION — MULTI-HOP QUESTION ANSWERING
+
+Challenge: Design a chain that maximizes token-level F1 accuracy on multi-hop reasoning questions.
+
+OBJECTIVE
+Return a chain specification guiding the downstream LLM such that:
+ 1) All chain steps are valid and well-defined
+ 2) The chain guides the LLM through multi-hop reasoning using retrieval and synthesis
+ 3) The final step returns a clear, extractable answer in "Answer: <answer>" format
+ 4) Maximizes token-level F1 accuracy between predicted and gold answers (SQuAD-style)
+
+FITNESS METRIC: Token-level F1 (not Exact Match). Partial credit is awarded for predictions
+that share tokens with the gold answer — e.g., predicting "New York City" for gold "New York"
+scores F1=0.80 rather than 0. Focus on producing answers that contain the correct content
+tokens, not necessarily identical surface forms.
+
+Output: 'Answer: <answer>' (extractable by regex) | Goal: Token-level F1 > 0.7
+
+PIPELINE COMPONENTS
+- LLM: Model with basic multi-hop reasoning capabilities
+- Retrieval: BM25 over Wikipedia abstracts via the "retrieve" tool; returns top-k passages
+  formatted as "[i] Title | sentence1 sentence2 ..."
+
+CHAIN STRUCTURE — FIXED 6-STEP TOPOLOGY
+
+Step 1 (TOOL) — "Retrieve first-hop passages"
+  Type: tool | Dependencies: [] | Frozen: Yes
+  Purpose: Retrieve Wikipedia passages using the question as query.
+  Config: tool_name="retrieve", input_mapping={"query": "$outer_context"}
+
+Step 2 (LLM) — "Summarize first-hop passages"
+  Type: llm | Dependencies: [1] | Frozen: No
+  Purpose: Extract key facts from the retrieved passages relevant to the question.
+
+Step 3 (LLM) — "Generate second-hop query"
+  Type: llm | Dependencies: [2] | Frozen: No
+  Purpose: Identify missing information and generate a focused second-hop search query.
+
+Step 4 (TOOL) — "Retrieve second-hop passages"
+  Type: tool | Dependencies: [3] | Frozen: Yes
+  Purpose: Retrieve additional passages using the generated query.
+  Config: tool_name="retrieve", input_mapping={"query": "$history[-1]"}
+
+Step 5 (LLM) — "Combine evidence"
+  Type: llm | Dependencies: [2, 4] | Frozen: No
+  Purpose: Integrate first-hop summary with second-hop passages into unified evidence.
+
+Step 6 (LLM) — "Final answer"
+  Type: llm | Dependencies: [2, 5] | Frozen: No
+  Purpose: Synthesize all evidence and produce the final answer.
+
+GENOME FORMAT
+entrypoint() must return a dict:
+{
+    "system_prompt": "string — shared instruction prepended to every LLM step",
+    "steps": [
+        {   # Step 1 (tool — frozen, must match exactly)
+            "number": 1,
+            "title": "Retrieve first-hop passages",
+            "step_type": "tool",
+            "dependencies": [],
+            "frozen": True,
+            "step_config": {
+                "tool_name": "retrieve",
+                "input_mapping": {"query": "$outer_context"},
+            },
+        },
+        {   # Step 2 (LLM)
+            "number": 2,
+            "title": "Summarize first-hop passages",
+            "step_type": "llm",
+            "aim": "required — step objective",
+            "stage_action": "required — what the LLM should do",
+            "reasoning_questions": "optional — guiding questions",
+            "example_reasoning": "optional — example thought process",
+            "dependencies": [1],
+            "frozen": False,
+        },
+        ...  # Steps 3-6 follow the same pattern
+    ],
+}
+
+CONSTRAINTS
+- LLM steps require non-empty "aim" and "stage_action" fields
+- Dependencies must reference only earlier steps (by number)
+- No dependency cycles
+- The final LLM step must guide the LLM to output "Answer: <answer>"
+- Steps list must have exactly 6 entries
+- Step types and dependencies must match the fixed topology
+- Frozen steps (1 and 4) must match the baseline exactly
+
+FAILURE MODES
+- Missing or empty required fields (aim, stage_action for LLM steps)
+- Dependency cycles or references to non-existent/later steps
+- Final step not producing extractable "Answer: ..." output
+- Wrong number of steps or type/deps mismatch with fixed topology
+- Frozen step content differs from baseline
+
+OUTPUT FORMAT
+Implement `def entrypoint()` that returns:
+- A dict with "system_prompt" (str) and "steps" (list of step dicts)
+- Each step dict has metadata fields (number, title, step_type, dependencies)
+- LLM steps have structured fields (aim, stage_action, reasoning_questions, example_reasoning)
+- LLM return format for final step: 'Answer: <answer>' (extractable by regex)
+- Each step dict includes "frozen" field (True/False)
+
+TASK HINTS
+- Keep prompts focused on each step's specific role
+- Query generation steps should instruct the LLM to output only the search query, avoiding extraneous text that confuses the retriever
+
+AVAILABLE METRICS:
+- fitness: Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection. (↑ better; [0.0, 1.0] range)
+- avg_extraction_failures: Average fraction of samples where answer extraction failed (↓ better; [0.0, 1.0] range)
+- is_valid: Whether the program is valid (1 valid, 0 invalid) (↑ better; [0.0, 1.0] range)
+
+---
+
+CRITICAL DOMAIN KNOWLEDGE FOR HOTPOTQA CHAIN:
+- Steps 1 and 4 (BM25 retrieval) are FROZEN and CANNOT be changed. Only steps 2, 3, 5, 6 are evolvable.
+- Step 3's output is used VERBATIM as a BM25 query. It MUST be a pure query string (e.g., "Marie Curie nationality") with NO PROSE, preamble, or reasoning.
+- BM25 rewards named entities and key attributes. Good: "Marie Curie nationality". Bad: "Find information about Marie Curie's national origin."
+- Chain-level system_prompt is prepended to ALL 4 LLM steps — every word costs context 4x. Keep it short.
+- Step 5 must fully consolidate evidence from both hops (step 6 never sees raw second-hop passages).
+
+---
+
+MUTATION STRATEGY:
+1. DIAGNOSE FAILURE TYPE:
+   - MISSING entries → problem in step 3 (improve query generation)
+   - High coverage but wrong answer → problem in steps 5-6 (improve evidence synthesis)
+2. HISTORICAL INSIGHT: Prioritize 'query_optimization' strategy (0.35 improvement) for step 3 failures.
+3. PROMPT POLICY:
+   - Compress chain-level system_prompt (shared cost)
+   - Expand step 3 with explicit constraints (e.g., "output pure query string, no prose")
+4. ONLY MODIFY evolvable steps (2,3,5,6). NEVER change frozen steps (1,4).
+
+---
+
+RETURN ONLY VALID JSON with keys: "archetype", "justification", "insights_used", "code". The "code" field must contain only valid Python code (no markdown).
+
+=== USER PROMPT ===
+Mutate the parent program(s). Use the insights, lineage, and failure analysis
+to guide your changes.
+
+Return JSON with keys: "archetype", "justification", "insights_used", "code".
+The "code" field must contain only valid Python code (no markdown fences).
+
+=== Parent 1 ===
+```python
+def entrypoint():
+    return {
+        "system_prompt": "Maximize token overlap. For entities: include necessary descriptors (e.g., 'London, England'). For facts: minimal noun phrase. For yes/no: 'yes' or 'no'. Avoid articles and extra words.",
+        "steps": [
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+                "frozen": True,
+            },
+            {
+                "number": 2,
+                "title": "Extract key concepts and candidate phrases",
+                "step_type": "llm",
+                "aim": "Extract key concepts and candidate answer phrases",
+                "stage_action": "Read all passages and output:\n- Key concepts and their relationships (format: 'Concept: [concept], Relationship: [relationship]')\n- Verbatim sentences containing key concepts or bridge connections\n- Candidate answer phrases: minimal text that directly answers the question (for yes/no: 'yes' or 'no'; for entities: include necessary descriptors)\nFormat:\nKey concepts and relationships:\n- [concept1]: [relationship1]\n- [concept2]: [relationship2]\nRelevant verbatim sentences:\n- [sentence1]\n- [sentence2]\nCandidate answer phrases:\n- [phrase1]\n- [phrase2]",
+                "reasoning_questions": "1. Which concepts are central to the question?\n2. What relationships connect these concepts?\n3. Which sentences provide bridge context?\n4. What minimal text directly answers the question?",
+                "example_reasoning": "Example 1:\nQuestion: What caused WWI?\nPassages:\n[1] Title | Archduke Franz Ferdinand's assassination triggered events.\n[2] Title | The assassination led to war declarations.\nOutput:\nKey concepts and relationships:\n- Archduke Franz Ferdinand: assassination\n- WWI: cause\nRelevant verbatim sentences:\n- Archduke Franz Ferdinand's assassination triggered events.\n- The assassination led to war declarations.\nCandidate answer phrases:\n- Archduke Franz Ferdinand's assassination\n\nExample 2:\nQuestion: Are Pamianthe and Manglietia in the same family?\nPassages:\n[1] Title | Pamianthe is a genus in the family Amaryllidaceae.\n[2] Title | Manglietia is a genus in the family Magnoliaceae.\nOutput:\nKey concepts and relationships:\n- Pamianthe: family Amaryllidaceae\n- Manglietia: family Magnoliaceae\n- Relationship: taxonomic family comparison\nRelevant verbatim sentences:\n- Pamianthe is a genus in the family Amaryllidaceae.\n- Manglietia is a genus in the family Magnoliaceae.\nCandidate answer phrases:\n- no",
+                "dependencies": [1],
+                "frozen": False,
+            },
+            {
+                "number": 3,
+                "title": "Generate concept-focused second query",
+                "step_type": "llm",
+                "aim": "Generate precise query with key concepts",
+                "stage_action": "Based on step2's key concepts and candidate answer phrases, identify missing information. Generate a concise query (under 13 words) containing key concepts. Output ONLY the query string.",
+                "reasoning_questions": "1. Which concept/relationship from step2 is still unknown?\n2. Which ≤13-word query includes key concepts?\n3. Does query avoid stop words?",
+                "example_reasoning": "Example:\nQuestion: What caused WWI?\nStep2 output:\nKey concepts and relationships:\n- Archduke Franz Ferdinand: assassination\n- WWI: cause\nCandidate answer phrases:\n- Archduke Franz Ferdinand's assassination\nQuery: immediate cause of World War I",
+                "dependencies": [2],
+                "frozen": False,
+            },
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+                "frozen": True,
+            },
+            {
+                "number": 5,
+                "title": "Synthesize answer with uniqueness",
+                "step_type": "llm",
+                "aim": "Identify answer phrase with necessary descriptors for uniqueness",
+                "stage_action": "Review step2 candidate answer phrases and step4 passages. Identify the answer phrase that answers the question:\n- Include necessary descriptors for uniqueness (e.g., 'London, England' not 'London')\n- Avoid articles and non-essential words\n- If evidence conflicts, prefer step4 passages for disambiguation\n- For yes/no, output 'yes' or 'no'\nOutput EXACTLY: 'Answer phrase: [phrase]'",
+                "reasoning_questions": "1. What phrase in step4 passages answers the question with necessary descriptors?\n2. How to resolve conflicts between step2 and step4 evidence?\n3. Can non-essential words be trimmed without losing uniqueness?",
+                "example_reasoning": "Example 1:\nQuestion: What caused WWI?\nStep2 candidate answer phrases:\n- Archduke Franz Ferdinand's assassination\nStep4 passages:\n[1] Title | The immediate cause was Archduke Franz Ferdinand's assassination.\nAnswer phrase: Archduke Franz Ferdinand's assassination\n\nExample 2:\nQuestion: Where is X?\nStep2: London\nStep4: London, England\nAnswer phrase: London, England\n\nExample 3:\nQuestion: Are Pamianthe and Manglietia in the same family?\nStep2 candidate answer phrases:\n- no\nStep4 passages: [conflicting evidence]\nAnswer phrase: no",
+                "dependencies": [2, 4],
+                "frozen": False,
+            },
+            {
+                "number": 6,
+                "title": "Final answer with precise fallback",
+                "step_type": "llm",
+                "aim": "Output answer with step5 validation and structured fallback",
+                "stage_action": "1. If step5 output contains 'Answer phrase: [text]', output 'Answer: [text]'\n2. Else, from step4 passages, extract the minimal phrase that directly answers the question (including necessary descriptors) and output 'Answer: [phrase]'\n3. Else, from step2 candidate answer phrases, select the most relevant phrase and output 'Answer: [phrase]'\n4. Else, output 'Answer: unknown'",
+                "reasoning_questions": "1. What follows 'Answer phrase: ' in step5?\n2. What minimal phrase in step4 answers the question with necessary descriptors?\n3. Which step2 candidate phrase is most relevant?",
+                "example_reasoning": "Example 1:\nStep5: 'Answer phrase: Archduke Franz Ferdinand\'s assassination'\nOutput: Answer: Archduke Franz Ferdinand\'s assassination\n\nExample 2:\nStep5: 'No answer found'\nStep4 passages: ['[1] Title | The immediate cause was Archduke Franz Ferdinand\'s assassination.']\nOutput: Answer: Archduke Franz Ferdinand\'s assassination\n\nExample 3:\nStep5: 'No answer found'\nStep4: no clear phrase, step2 candidate answer phrases: ['Archduke Franz Ferdinand\'s assassination']\nOutput: Answer: Archduke Franz Ferdinand\'s assassination\n\nExample 4:\nOutput: Answer: unknown",
+                "dependencies": [2, 5],
+                "frozen": False,
+            },
+        ],
+    }
+```
+
+## Program Metrics
+
+- fitness : 0.612 (Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection.; ↑ better)
+- avg_extraction_failures : 0.027 (Average fraction of samples where answer extraction failed; ↓ better)
+- is_valid : 1 (Whether the program is valid (1 valid, 0 invalid); ↑ better)
+
+---
+
+## Program Insights
+
+- **[format_simplification]**[beneficial]**[medium]**: Step 2's 3-section output format (concepts, sentences, candidates) causes inconsistent extraction. Current structure adds cognitive load that reduces token overlap. Mutation: Remove first two sections, have step 2 output only candidate answer phrases with minimal context indicators to improve focus on answer-relevant content.
+- **[query_length_constraint]**[harmful]**[medium]**: Step 3's hard 13-word query limit truncates necessary context for complex questions. Example: 'immediate cause of World War I' works but some questions need more nuance. Mutation: Replace with 'concise but comprehensive query that captures all key elements' without word count to improve second-hop retrieval quality.
+- **[evidence_weighting]**[fragile]**[medium]**: Step 5 rigidly prefers step 4 passages without evaluating relevance ('prefer step4 passages for disambiguation'). This fails when second-hop retrieval returns noisy results. Mutation: Add criteria like 'Prioritize passages containing connecting phrases between step 2 concepts' to better assess evidence quality for token F1.
+- **[fallback_optimization]**[beneficial]**[medium]**: Step 6's fallback strategy prioritizes source order rather than answer quality. For token F1=0.612, we need to evaluate candidates for overlap potential. Mutation: In fallback cases, score candidates based on token overlap with question elements before selection to directly optimize for fitness metric.
+- **[prompt_specialization]**[rigid]**[medium]**: System prompt's generic 'maximize token overlap' lacks question-type strategies. Current examples don't cover temporal/spatial questions. Mutation: Expand with specific examples for different question types (e.g., 'For 'when' questions, include year/month if available') to improve token coverage.
+- **[format_robustness]**[fragile]**[high]**: Step 5 requires exact 'Answer phrase: [text]' formatting. Current code checks for this literal string, causing extraction failures at 0.027. Mutation: Make extraction robust with 'If output contains direct answer, extract minimal relevant phrase regardless of formatting' to reduce extraction failures.
+- **[direct_extraction]**[harmful]**[medium]**: Step 2 focuses on abstract concepts before candidate phrases, adding unnecessary reasoning layer. Current structure: 'Key concepts and relationships...' then candidates. Mutation: Reframe step 2 to directly identify answer spans, skipping conceptual abstraction to reduce error propagation in multi-hop reasoning.
+- **[descriptor_criteria]**[rigid]**[low]**: Guidance to 'include necessary descriptors' lacks clear criteria. System prompt gives 'London, England' example but no decision rules. Mutation: Add specific rules like 'Include country for cities with >1 major namesake' to standardize descriptor inclusion and improve token-level F1 consistency.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: 6e7ec395 → c10cb096
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.624 | 0.612 | -0.012 | -1.9% | worsened ★ |
+| avg_extraction_failures | ↓ better | 0.018 | 0.027 | +0.008 | +45.5% | worsened |
+| is_valid | ↑ better | 1 | 1 | +0 | +0.0% | no change |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,6 +1,6 @@) Removed 'exactly' and specificity from system_prompt, causing inconsistent output casing/formatting; +45.5% extraction failures and -0.0119 F1.
+  - **[generalization]**: (@@ -15,23 +15,23 @@) Generalized entity-relation to concept-relationship, reducing query precision for 80% entity questions; caused irrelevant second-hop passages and -0.0119 F1.
+  - **[refinement]**: (@@ -48,22 +48,22 @@) Weakened step5 minimality constraint by removing 'trim' directive, increasing extra tokens not in gold answers; explains -0.0119 F1 drop.
+
+### Children
+
+#### Child 1: c10c → 13c1
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.612 | -1000.000 | -1000.612 | <-100.0% | worsened ★ |
+| avg_extraction_failures | ↓ better | 0.027 | 1.000 | +0.973 | >+100.0% | worsened ★ |
+| is_valid | ↑ better | 1 | 0 | -1 | -100.0% | worsened ★ |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,10 +1,10 @@) and (@@ -15,29 +15,29 @@) Removed periods from frozen step titles (steps 1 and 4), violating frozen constraint; caused validation failure (is_valid=0) and 100% extraction failures.
+  - **[refinement]**: (@@ -48,23 +48,23 @@) Step5 now outputs raw phrase instead of 'Answer phrase: [phrase]', making step6 parsing fragile; risks extraction failures if step5 output varies (e.g., 'Unknown' vs 'unknown').
+  - **[refinement]**: (@@ -15,29 +15,29 @@) Step2 now outputs only candidate phrases, removing key concepts and relationships; reduces context for step3 query generation, potentially lowering retrieval quality and F1 score.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 6 | **Total Programs**: 82
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 3 | 0.644 | 0.512 | 0.328 | 54.5% | 22 | 0.82 | 4 |
+| 4 | 0.662 | 0.467 | 0.316 | 88.9% | 18 | 0.94 | 6 |
+| 5 | 0.661 | 0.509 | 0.303 | 64.7% | 17 | 0.41 | 2 |
+| 6 ← | 0.674 | 0.543 | 0.350 | 85.7% | 7 | 1.00 | 3 |
+| 7 | 0.652 | 0.616 | 0.554 | 42.9% | 7 | 0.14 | 1 |
+| 8 | 0.423 | 0.423 | 0.423 | 100.0% | 1 | 0.00 | 0 |
+
+---
+
+## Failure Analysis (10 of 311 failure(s) randomly sampled)
+
+### Case 1
+**Question**: In which year was this brand name founded on which Sony Ericsson K608i became available?
+**Expected**: 2002
+**Predicted**: 2005
+**Hop 1 retrieval** (1/2 gold): MISSING — "Hutchison 3G"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Hutchison 3G"
+
+### Case 2
+**Question**: In what city does Mike Carey coach women's basketball ?
+**Expected**: Morgantown
+**Predicted**: West Virginia
+**Hop 1 retrieval** (1/2 gold): MISSING — "West Virginia University"
+**Hop 2 retrieval** (1/2 gold): MISSING — "West Virginia University"
+
+### Case 3
+**Question**: When was the English poet, painter, and printmaker died who wrote the poem "A Poison Tree"?
+**Expected**: 12 August 1827
+**Predicted**: William Blake (1757–1827)
+**Hop 1 retrieval** (1/2 gold): MISSING — "William Blake"
+**Hop 2 retrieval** (0/2 gold): MISSING — "A Poison Tree", "William Blake"
+
+### Case 4
+**Question**: Which Franco Dragone created production is one of six resident Cirque du Soleil shows in Las Vegas ?
+**Expected**: Mystère
+**Predicted**: Le Rêve
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 5
+**Question**: Which of the owner of Portstewart Football Club is a former Northern Ireland international footballer and manager?
+**Expected**: Harry Gregg
+**Predicted**: Felix Healy
+**Hop 1 retrieval** (1/2 gold): MISSING — "Harry Gregg"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Harry Gregg"
+
+### Case 6
+**Question**: West Oaks Mall includes a theatre by the movie theatre chain founded in what year?
+**Expected**: 1920
+**Predicted**: 1920s
+**Hop 1 retrieval** (0/2 gold): MISSING — "AMC Theatres", "West Oaks Mall (Orlando)"
+**Hop 2 retrieval** (0/2 gold): MISSING — "AMC Theatres", "West Oaks Mall (Orlando)"
+
+### Case 7
+**Question**: Where was Barbarossa Chandelier crowned Holy Roman Emperor?
+**Expected**: Aachen
+**Predicted**: Aachen, Germany
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Barbarossa Chandelier"
+
+### Case 8
+**Question**: Which Disney film was released first, Meet the Robinsons or Peter Pan?
+**Expected**: Peter Pan
+**Predicted**: Peter Pan (1953 film)
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 9
+**Question**: Albert "Ginger" Baker, is a Northern Irish former loyalist and ex-British Army soldier, who was convicted of four murders, carried out by which loyalist paramilitary and vigilante group, in Northern Ireland?
+**Expected**: Ulster Defence Association
+**Predicted**: Ulster Defence Association (UDA)
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Ulster Defence Association"
+
+### Case 10
+**Question**: What year did Les Scadding win the EuroMillions lottery?
+**Expected**: in 2009.
+**Predicted**: 2009
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "EuroMillions"
+
+_Use these failure cases to identify systematic weaknesses. MISSING retrieval entries indicate the BM25 query at that hop failed to surface key supporting documents — consider improving the query generation prompt for that step. Cases where retrieval succeeded but prediction was still wrong suggest reasoning or answer extraction issues._
+

@@ -1,0 +1,6 @@
+TASK — TABULAR MULTICLASS CLASSIFICATION (otto, 9 classes)
+
+DATASET — Otto Group product classification; classify products into 9 categories from 93 anonymized non-negative count features (sparse, many zeros)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-92]     numeric

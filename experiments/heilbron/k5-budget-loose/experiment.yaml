@@ -1,0 +1,338 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/k5-budget-loose
+    task: heilbron
+    branch: exp/heilbron/k5-budget-loose
+    pr_number: 207
+    tracking_issue: null
+    prereg_commit: 7c4a8efe
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    pipeline: adversarial_asymmetric
+    shared_overrides:
+      num_parents: 1
+      max_elites_per_generation: 8
+      max_mutations_per_generation: 8
+      stage_timeout: 2400
+      dag_timeout: 2400
+      mutation_mode: rewrite
+      significant_change: 0.01
+      inner_iterations: 1
+      n_opponents: 1
+      source_prompt_k: 1
+      archive_reeval: false
+  runs:
+  - label: A3_G
+    db: 1
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Arm A3 (Composition + K=3+loose): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961646
+    log_path: run_A3_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - post_step_hook=\${composition_injection_hook}
+    role: constructor
+  - label: A3_D
+    db: 2
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Arm A3 (Composition + K=3+loose): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961647
+    log_path: run_A3_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=24
+    - sync_min_delta=1
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    role: improver
+  - label: A5_G
+    db: 3
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Arm A5 (Composition + K=5+loose): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961648
+    log_path: run_A5_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - post_step_hook=\${composition_injection_hook}
+    role: constructor
+  - label: A5_D
+    db: 4
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Arm A5 (Composition + K=5+loose): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961649
+    log_path: run_A5_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=40
+    - sync_min_delta=1
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    role: improver
+  - label: B3_G
+    db: 5
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Arm B3 (Gradient-in-prompt + K=3+loose): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961650
+    log_path: run_B3_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    role: constructor
+  - label: B3_D
+    db: 6
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Arm B3 (Gradient-in-prompt + K=3+loose): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961651
+    log_path: run_B3_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=24
+    - sync_min_delta=1
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    role: improver
+  - label: B5_G
+    db: 7
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Arm B5 (Gradient-in-prompt + K=5+loose): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961652
+    log_path: run_B5_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=8
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    role: constructor
+  - label: B5_D
+    db: 8
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Arm B5 (Gradient-in-prompt + K=5+loose): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1961653
+    log_path: run_B5_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=40
+    - sync_min_delta=1
+    - opponent_redis_db=7
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    role: improver
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 50
+  stopping_rule:
+    description: max_generations=50 OR futility_at_gen25(all_4_cells < 0.030)
+    conditions:
+    - kind: max_generations
+      threshold: 50
+      note: hard stop at gen 50
+    - kind: futility
+      threshold: 0.03
+      window: 25
+      note: if all 4 cells (A3, A5, B3, B5) have max(G,D) < 0.030 at gen 25, stop
+        experiment
+    enforce_at: checkpoint
+  baseline:
+    reference: heilbron/baseline-repro
+    mean: 0.03449
+    metric: actual_fitness (best-overall)
+  tools: []
+lifecycle:
+  status: invalid
+  launch:
+    time: '2026-04-16T17:17:35.428039+00:00'
+    commit: 1cf6d33faacb0bed9b8c4c4a7a00136562314401
+    confirmed_at: '2026-04-16T17:17:35.428039+00:00'
+  smoke_test:
+    completed: true
+    db: null
+    generations: 3
+    log_path: smoke_T1_G.log
+    completed_at: '2026-04-16T16:24:32Z'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-16T15:37:36Z'
+    note: 3 CRITICAL fallbacks identified (F1-F3), all covered by runtime checks.
+      D/G ratio check at gen 5 confirms treatment active.
+telemetry:
+  checkpoints: []
+  mid_run_test_eval:
+    completed: false
+    completed_at: null
+  checkpoint_analysis:
+    mid_run:
+      completed: false
+      completed_at: null
+  treatment_checks:
+    completed: false
+    completed_at: null
+    results: []
+control_plane:
+  watchdog:
+    plugin: adversarial
+    sentinel_value: -1.0
+    plot_metrics:
+    - actual_fitness
+    plot_commands:
+    - command: arms-race
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        bands: true
+        show-max: true
+        annotate-frontier: true
+        max-annotations: 3
+      output_name: arms_race.png
+      caption: Arms-race dynamics (G vs D per cell A3/A5/B3/B5, max(G,D) overlay)
+    - command: comparison
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        annotate-frontier: true
+        max-annotations: 3
+      output_name: evolution_runs_comparison.png
+      caption: All 8 runs vs SOTA baseline (2x2 factorial feedback_mode x K budget)
+    alert_thresholds:
+      invalidity_rate: 0.75
+      stagnation_window: 10
+      generation_gap_threshold: 5
+    poll_interval_s: 3600
+    plot_retries: 3
+    plot_retry_delay_s: 30
+    rolling_comment_threshold_hours: 24
+    checkpoint_milestones:
+    - 0.1
+    - 0.2
+    - 0.5
+    - 1.0
+    no_proxy_hosts: []
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 1962169
+  anomaly_detector_cron_id: 759ce97f
+  checkpoint_cron_id: c07535f1
+checkpoints:
+- gen: 1
+  timestamp: '2026-04-16T18:15:57.019624+00:00'
+  metric_name: fitness
+  run_metrics:
+  - label: A3_G
+    gen: 2
+    best_fitness: 0.83646
+    recent_invalidity: 0.0
+  - label: A3_D
+    gen: 2
+    best_fitness: 0.17333
+    recent_invalidity: 0.0
+  - label: A5_G
+    gen: 1
+    best_fitness: 0.89427
+    recent_invalidity: 0.0
+  - label: A5_D
+    gen: 1
+    best_fitness: 0.22115
+    recent_invalidity: 0.0
+  - label: B3_G
+    gen: 2
+    best_fitness: 0.39191
+    recent_invalidity: 0.0
+  - label: B3_D
+    gen: 1
+    best_fitness: 0.42819
+    recent_invalidity: 0.0
+  - label: B5_G
+    gen: 1
+    best_fitness: 0.84422
+    recent_invalidity: 0.0
+  - label: B5_D
+    gen: 1
+    best_fitness: 0.137
+    recent_invalidity: 0.0
+  notes: "First checkpoint after re-launch (post Amendment #3). Diagnose: 1 MAJOR\
+    \ per run is a known false-positive about config-group dump format (evolution=steady_state);\
+    \ runs are healthy and producing valid programs. B3_D and B5_D show MINOR strategy\
+    \ rejection high (33/51 rejected) \u2014 expected for improver D-role early on."

@@ -1,0 +1,495 @@
+=== PROMPT DUMP 20260318T065622 ===
+prompt_id: 9aa80d283abbc5aa
+
+=== SYSTEM PROMPT ===
+You optimize HotpotQA chains.
+
+OBJECTIVE: CHAIN EVOLUTION
+You are evolving a multi-step reasoning chain defined with structured fields.
+Each LLM step is specified by semantic fields (aim, stage_action, etc.) that are
+automatically assembled into prompts — you do not write raw prompt text. You control
+the structured-field content and the chain-level system_prompt.
+
+Consider the next guidelines:
+1) Chain optimization is a high-dimensional, experimental design problem. Each LLM step's
+   structured fields may combine:
+   - Reasoning scaffolds: explicit step-by-step thinking, sub-problem decomposition
+   - Role & context framing: role definition, domain setup, goal specification, success criteria
+   - Instruction precision: task boundaries, structural directives
+   - In-context exemplars: input-output examples, pattern demonstrations
+   - Constraints: output schema, formatting rules
+   Additionally, multi-step chains require attention to:
+   - Step coordination: each step should produce output shaped for its downstream consumers
+   - Information flow: pass only relevant information forward to avoid context dilution
+   - Role specialization: each step should have a clear, focused responsibility
+2) Structured fields of LLM steps:
+   - "aim" (REQUIRED, non-empty): Primary objective of this step
+   - "stage_action" (REQUIRED, non-empty): Specific action to perform
+   - "reasoning_questions" (optional): Key questions to answer
+   - "example_reasoning" (optional): Example of expert reasoning
+   These fields are assembled into a full LLM prompt for each step. The assembly
+   order (top to bottom):
+
+     [If system_prompt is non-empty]
+     System Instructions:
+     {system_prompt}
+
+     Data:
+     {outer_context}              ← initial user input
+
+     [If step has dependencies]
+     Previous steps:
+     Step N. Title
+     Result: <output>
+     ...
+     Based on the results of previous steps, perform the following task:
+     Step {number}. {title}
+     Objective: {aim}
+     Task: {stage_action}
+     Questions: {reasoning_questions}
+     Example reasoning: {example_reasoning}
+
+   Key points:
+   - system_prompt is shared — prepended to every LLM step
+   - outer_context wraps every LLM step as "Data:\n{outer_context}"
+   - Dependencies list controls which prior step outputs are visible
+3) Implementation details:
+   - entrypoint() returns a dict with "system_prompt" (str, may be empty) and "steps" (list of dicts)
+   - Each step dict has metadata fields: number, title, step_type, dependencies
+   - LLM steps carry the four structured fields above; tool steps carry step_config
+   - Tool steps use $-reference syntax in input_mapping:
+       $outer_context — the original sample context string
+       $history[-1] — output of the immediately preceding step
+       $history[N] — output of step at index N (0-based)
+
+STEP TYPES
+The chain supports two step types:
+- "llm": LLM reasoning step with structured fields (aim, stage_action, reasoning_questions,
+  example_reasoning). The LLM receives the assembled prompt and produces a text response.
+- "tool": Tool execution step with step_config. Currently available tool:
+    "retrieve" — BM25 retrieval over Wikipedia abstracts. Returns top-k passages
+    formatted as "[i] Title | sentence1 sentence2 ...".
+    Usage in step_config: {"tool_name": "retrieve", "input_mapping": {"query": "$reference"}}
+    Where $reference is one of: $outer_context, $history[-1], $history[N]
+
+EVOLUTION MODE — STATIC
+The chain topology (step count, types, dependencies) is fixed. Only the structured field
+content of non-frozen LLM steps and the chain-level system_prompt are evolvable.
+Frozen steps must match the baseline exactly and cannot be modified.
+Each step dict additionally includes a "frozen" metadata field (True/False).
+
+TASK DEFINITION — MULTI-HOP QUESTION ANSWERING
+
+Challenge: Design a chain that maximizes token-level F1 accuracy on multi-hop reasoning questions.
+
+OBJECTIVE
+Return a chain specification guiding the downstream LLM such that:
+ 1) All chain steps are valid and well-defined
+ 2) The chain guides the LLM through multi-hop reasoning using retrieval and synthesis
+ 3) The final step returns a clear, extractable answer in "Answer: <answer>" format
+ 4) Maximizes token-level F1 accuracy between predicted and gold answers (SQuAD-style)
+
+FITNESS METRIC: Token-level F1 (not Exact Match). Partial credit is awarded for predictions
+that share tokens with the gold answer — e.g., predicting "New York City" for gold "New York"
+scores F1=0.80 rather than 0. Focus on producing answers that contain the correct content
+tokens, not necessarily identical surface forms.
+
+Output: 'Answer: <answer>' (extractable by regex) | Goal: Token-level F1 > 0.7
+
+PIPELINE COMPONENTS
+- LLM: Model with basic multi-hop reasoning capabilities
+- Retrieval: BM25 over Wikipedia abstracts via the "retrieve" tool; returns top-k passages
+  formatted as "[i] Title | sentence1 sentence2 ..."
+
+CHAIN STRUCTURE — FIXED 6-STEP TOPOLOGY
+
+Step 1 (TOOL) — "Retrieve first-hop passages"
+  Type: tool | Dependencies: [] | Frozen: Yes
+  Purpose: Retrieve Wikipedia passages using the question as query.
+  Config: tool_name="retrieve", input_mapping={"query": "$outer_context"}
+
+Step 2 (LLM) — "Summarize first-hop passages"
+  Type: llm | Dependencies: [1] | Frozen: No
+  Purpose: Extract key facts from the retrieved passages relevant to the question.
+
+Step 3 (LLM) — "Generate second-hop query"
+  Type: llm | Dependencies: [2] | Frozen: No
+  Purpose: Identify missing information and generate a focused second-hop search query.
+
+Step 4 (TOOL) — "Retrieve second-hop passages"
+  Type: tool | Dependencies: [3] | Frozen: Yes
+  Purpose: Retrieve additional passages using the generated query.
+  Config: tool_name="retrieve", input_mapping={"query": "$history[-1]"}
+
+Step 5 (LLM) — "Combine evidence"
+  Type: llm | Dependencies: [2, 4] | Frozen: No
+  Purpose: Integrate first-hop summary with second-hop passages into unified evidence.
+
+Step 6 (LLM) — "Final answer"
+  Type: llm | Dependencies: [2, 5] | Frozen: No
+  Purpose: Synthesize all evidence and produce the final answer.
+
+GENOME FORMAT
+entrypoint() must return a dict:
+{
+    "system_prompt": "string — shared instruction prepended to every LLM step",
+    "steps": [
+        {   # Step 1 (tool — frozen, must match exactly)
+            "number": 1,
+            "title": "Retrieve first-hop passages",
+            "step_type": "tool",
+            "dependencies": [],
+            "frozen": True,
+            "step_config": {
+                "tool_name": "retrieve",
+                "input_mapping": {"query": "$outer_context"},
+            },
+        },
+        {   # Step 2 (LLM)
+            "number": 2,
+            "title": "Summarize first-hop passages",
+            "step_type": "llm",
+            "aim": "required — step objective",
+            "stage_action": "required — what the LLM should do",
+            "reasoning_questions": "optional — guiding questions",
+            "example_reasoning": "optional — example thought process",
+            "dependencies": [1],
+            "frozen": False,
+        },
+        ...  # Steps 3-6 follow the same pattern
+    ],
+}
+
+CONSTRAINTS
+- LLM steps require non-empty "aim" and "stage_action" fields
+- Dependencies must reference only earlier steps (by number)
+- No dependency cycles
+- The final LLM step must guide the LLM to output "Answer: <answer>"
+- Steps list must have exactly 6 entries
+- Step types and dependencies must match the fixed topology
+- Frozen steps (1 and 4) must match the baseline exactly
+
+FAILURE MODES
+- Missing or empty required fields (aim, stage_action for LLM steps)
+- Dependency cycles or references to non-existent/later steps
+- Final step not producing extractable "Answer: ..." output
+- Wrong number of steps or type/deps mismatch with fixed topology
+- Frozen step content differs from baseline
+
+OUTPUT FORMAT
+Implement `def entrypoint()` that returns:
+- A dict with "system_prompt" (str) and "steps" (list of step dicts)
+- Each step dict has metadata fields (number, title, step_type, dependencies)
+- LLM steps have structured fields (aim, stage_action, reasoning_questions, example_reasoning)
+- LLM return format for final step: 'Answer: <answer>' (extractable by regex)
+- Each step dict includes "frozen" field (True/False)
+
+TASK HINTS
+- Keep prompts focused on each step's specific role
+- Query generation steps should instruct the LLM to output only the search query, avoiding extraneous text that confuses the retriever
+
+METRICS: - fitness: Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection. (↑ better; [0.0, 1.0] range)
+- avg_extraction_failures: Average fraction of samples where answer extraction failed (↓ better; [0.0, 1.0] range)
+- is_valid: Whether the program is valid (1 valid, 0 invalid) (↑ better; [0.0, 1.0] range)
+
+CRITICAL RULES:
+• Step 3: Output ONLY bare search terms (e.g., 'Marie Curie nationality') → 1 line, NO verbs/punctuation
+• system_prompt: ≤15 words (shared across 4 steps → every word costs 4x)
+• Step 5: MUST output 'Facts: [evidence]; ...' (consolidated evidence)
+
+=== USER PROMPT ===
+## CONTEXT
+=== Parent 1 ===
+```python
+def entrypoint():
+    return {
+        "system_prompt": "You are a precise multi-hop reasoning agent. Prioritize token-level accuracy: extract minimal verbatim spans from evidence for the final answer. Avoid paraphrasing and adding extra context. Base answers strictly on evidence.",
+        "steps": [
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+                "frozen": True,
+            },
+            {
+                "number": 2,
+                "title": "Summarize key facts from passages.",
+                "step_type": "llm",
+                "aim": "Extract minimal key facts and rank missing information by criticality.",
+                "stage_action": (
+                    "Read all passages and identify minimal verbatim phrases (not full sentences) directly relevant to the question. "
+                    "Then identify minimal noun phrases for missing information, ranked by criticality (1. most critical). "
+                    "Output EXACTLY in this format:\n"
+                    "Key Facts:\n"
+                    "- [minimal verbatim phrase 1]\n"
+                    "- [minimal verbatim phrase 2]\n"
+                    "...\n"
+                    "Missing Information:\n"
+                    "1. [minimal noun phrase for fact 1]\n"
+                    "2. [minimal noun phrase for fact 2]\n"
+                    "..."
+                ),
+                "reasoning_questions": "Which minimal verbatim phrases directly address the question? What specific minimal noun phrases describe the missing facts? (e.g., 'John Randolph death year') Rank missing facts by how critical they are for answering the question.",
+                "example_reasoning": (
+                    "Example for step 2:\n"
+                    "Question: 'What year did the guest star of the movie ... Emanuel Cohen die?'\n"
+                    "Passages:\n"
+                    "  [1] Emanuel Cohen | Emanuel Cohen was an actor known as John Randolph.\n"
+                    "  [2] John Randolph | John Randolph was an American actor.\n"
+                    "Output:\n"
+                    "Key Facts:\n"
+                    "- 'known as John Randolph'\n"
+                    "- 'was an American actor'\n"
+                    "Missing Information:\n"
+                    "1. John Randolph death year"
+                ),
+                "dependencies": [1],
+                "frozen": False,
+            },
+            {
+                "number": 3,
+                "title": "Generate second-hop query.",
+                "step_type": "llm",
+                "aim": "Generate precise query for the top missing fact.",
+                "stage_action": (
+                    "Based SOLELY on the top-ranked missing fact (item 1) from step 2, generate a concise search query. "
+                    "Output ONLY the query text, no additional text."
+                ),
+                "reasoning_questions": "What is the minimal query that targets the top missing fact? (e.g., 'John Randolph death year')",
+                "example_reasoning": (
+                    "Example queries:\n"
+                    "Missing: '1. John Randolph death year' → Query: John Randolph death year\n"
+                    "Missing: '1. Football Under Cover genre' → Query: Football Under Cover genre"
+                ),
+                "dependencies": [2],
+                "frozen": False,
+            },
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+                "frozen": True,
+            },
+            {
+                "number": 5,
+                "title": "Combine evidence",
+                "step_type": "llm",
+                "aim": "Resolve contradictions and extract minimal evidence.",
+                "stage_action": (
+                    "1. From first-hop Key Facts and second-hop passages, extract ONLY minimal verbatim phrases directly answering the question.\n"
+                    "2. Resolve contradictions by:\n"
+                    "   - If dates are present: prefer the more recent source.\n"
+                    "   - Else: prefer the source with the most specific title (e.g., 'John Randolph biography' over 'American actors').\n"
+                    "3. Output EXACTLY in this format:\n"
+                    "Resolved Evidence:\n"
+                    "- [resolved fact 1]\n"
+                    "- [resolved fact 2]\n"
+                    "...\n"
+                    "Note: [brief resolution rationale if contradictions exist]"
+                ),
+                "reasoning_questions": "Which evidence pieces directly answer the question? How should contradictions be resolved using source recency/specificity? What is the minimal verbatim phrase that answers the question?",
+                "example_reasoning": (
+                    "Example for step 5:\n"
+                    "First-hop summary:\n"
+                    "Key Facts:\n"
+                    "- 'known as John Randolph'\n"
+                    "Missing Information:\n"
+                    "1. John Randolph film genre\n"
+                    "Second-hop passages:\n"
+                    "[1] John Randolph biography | John Randolph was an actor in the film genre drama.\n"
+                    "[2] American actors | John Randolph was an actor in the film genre comedy.\n"
+                    "Resolved Evidence:\n"
+                    "- 'John Randolph was an actor in the film genre drama.'\n"
+                    "Note: Prefer passage [1] as it has a more specific title ('John Randolph biography')."
+                ),
+                "dependencies": [2, 4],
+                "frozen": False,
+            },
+            {
+                "number": 6,
+                "title": "Final answer",
+                "step_type": "llm",
+                "aim": "Answer using ONLY resolved evidence.",
+                "stage_action": (
+                    "Answer the question using ONLY the 'Resolved Evidence' from step 5. "
+                    "If evidence is insufficient, output 'Answer: insufficient evidence'. "
+                    "Otherwise, output EXACTLY: Answer: <answer>"
+                ),
+                "reasoning_questions": "Does the resolved evidence contain all required information? If yes, what exact phrase(s) form the answer?",
+                "example_reasoning": (
+                    "Example for step 6:\n"
+                    "Resolved Evidence:\n"
+                    "- 'John Randolph died on February 24, 2004.'\n"
+                    "Question: 'What year did John Randolph die?'\n"
+                    "Output: Answer: 2004"
+                ),
+                "dependencies": [2, 5],
+                "frozen": False,
+            },
+        ],
+    }
+```
+
+## Program Metrics
+
+- fitness : 0.554 (Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection.; ↑ better)
+- avg_extraction_failures : 0.000 (Average fraction of samples where answer extraction failed; ↓ better)
+- is_valid : 1 (Whether the program is valid (1 valid, 0 invalid); ↑ better)
+
+---
+
+## Program Insights
+
+- **[evidence_extraction]**[harmful]**[high]**: Step5 outputs non-minimal evidence (e.g., full sentences) despite instructions, causing step6 to include extra tokens. Example: outputting 'February 24, 2004' for year question. Fix: Revise step5 to require minimal contiguous spans (e.g., '2004') and update example.
+- **[answer_normalization]**[harmful]**[high]**: Strict verbatim extraction in step5/6 conflicts with normalized gold answers (e.g., '2004' vs 'February 24, 2004'). Token F1 drops due to extra tokens. Fix: In step6, add instruction to extract only the required part (e.g., year) from evidence.
+- **[query_generation]**[fragile]**[medium]**: Step3 uses only top missing fact from step2; incorrect ranking causes bad queries. Example: if top fact is wrong, second retrieval fails. Fix: Have step2 output top-2 missing items and step3 generate a combined query.
+- **[contradiction_resolution]**[rigid]**[medium]**: Step5's fixed rules (dates/title) don't cover all contradictions (e.g., conflicting numbers). Causes incorrect evidence. Fix: Replace rules with general instruction (e.g., 'prefer authoritative sources') and add non-date example.
+- **[context_omission]**[harmful]**[medium]**: Step2 extracts ambiguous fragments (e.g., 'known as John Randolph') without subject context. Leads to wrong missing info. Fix: Require key facts to include subject-predicate (e.g., 'Emanuel Cohen was known as John Randolph').
+- **[source_metadata]**[harmful]**[medium]**: Step5 cannot apply recency rule because step2 key facts lack source dates. Causes arbitrary resolution. Fix: Step2 should include source title/date with each key fact for step5's use.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: 2fe0a536 → 8d209b44
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.524 | 0.554 | +0.031 | +5.9% | improved ★ |
+| avg_extraction_failures | ↓ better | 0.000 | 0.000 | +0.000 | — | improved |
+| is_valid | ↑ better | 1 | 1 | +0 | +0.0% | no change |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,6 +1,6 @@) + (@@ -17,21 +17,21 @@) + (@@ -40,10 +40,10 @@) Required minimal verbatim spans instead of full sentences; reduced extraneous tokens in evidence, directly improving token-level F1 by 0.03088 as answers matched gold tokens more precisely.
+  - **[avoidance]**: (@@ -17,21 +17,21 @@) + (@@ -40,10 +40,10 @@) + (@@ -52,18 +52,16 @@) Ranked missing facts and used only top item for query; avoided multi-fact queries that diluted retrieval focus, leading to more relevant passages and +0.03088 F1 gain.
+  - **[generalization]**: (@@ -86,7 +84,9 @@) + (@@ -99,15 +99,15 @@) Structured contradiction resolution with date/specificity hierarchy; eliminated ambiguous evidence selection, improving answer token consistency and contributing to +0.03088 F1.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 5 | **Total Programs**: 67
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 2 | 0.661 | 0.542 | 0.410 | 100.0% | 8 | 1.50 | 5 |
+| 3 | 0.610 | 0.576 | 0.553 | 75.0% | 12 | 1.33 | 5 |
+| 4 | 0.693 | 0.553 | 0.441 | 87.5% | 16 | 1.25 | 4 |
+| 5 ← | 0.673 | 0.575 | 0.417 | 65.0% | 20 | 0.40 | 3 |
+| 6 | 0.709 | 0.636 | 0.586 | 100.0% | 8 | 0.25 | 2 |
+| 7 | 0.702 | 0.692 | 0.682 | 100.0% | 2 | 0.00 | 0 |
+
+---
+
+## Failure Analysis (10 of 341 failure(s) randomly sampled)
+
+### Case 1
+**Question**: Marino is a suburb in the south of Adelaide, it neighbours Seacliff, Kingston Park, and which coastal suburb in the south of Adelaide, South Australia, with a population of more than 12,000 people?
+**Expected**: Hallett Cove
+**Predicted**: Hallett Cove is a coastal suburb in the south of Adelaide, South Australia, with a population of more than 12,000 people.
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Marino, South Australia"
+
+### Case 2
+**Question**: what does 1977–78 UCLA Bruins men's basketball team and John Wooden have in common?
+**Expected**: University of California
+**Predicted**: since John Wooden's 1972–73 team, UCLA's team finished 1st in the Pac-8 regular season
+**Hop 1 retrieval** (1/2 gold): MISSING — "John Wooden"
+**Hop 2 retrieval** (0/2 gold): MISSING — "1977–78 UCLA Bruins men's basketball team", "John Wooden"
+
+### Case 3
+**Question**: Uzumaki, is a "seinen" horror manga series written and illustrated, by which Japanese horror manga artist?
+**Expected**: Junji Ito
+**Predicted**: written and illustrated by Junji Ito
+**Hop 1 retrieval** (1/2 gold): MISSING — "Junji Ito"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Junji Ito", "Uzumaki"
+
+### Case 4
+**Question**: Both Ruby Yang and Marc Caro are french ?
+**Expected**: no
+**Predicted**: insufficient evidence
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Marc Caro"
+
+### Case 5
+**Question**: Which character is nicknamed "The Mountain" and played by Hafþór Júlíus Björnsson in the TV version of Game of Thrones?
+**Expected**: Gregor Clegane
+**Predicted**: Ser Gregor 'The Mountain' Clegane
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 6
+**Question**: Do Abigail Child and Nabil Ayouch both write media?
+**Expected**: yes
+**Predicted**: Yes, both "Nabil Ayouch ... writer of Moroccan origin." and "Abigail Child ... filmmaker, poet, and writer." explicitly state they are writers.
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 7
+**Question**: Which singer has been part of more bands, Richard Ashcroft or James Bourne?
+**Expected**: James Elliot Bourne
+**Predicted**: Richard Ashcroft
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (0/2 gold): MISSING — "James Bourne", "Richard Ashcroft"
+
+### Case 8
+**Question**: For what team is the cricket bowler, who is considered to be the fastest, play a role of captain?
+**Expected**: Karachi Dolphins
+**Predicted**: Pakistan
+**Hop 1 retrieval** (1/2 gold): MISSING — "Karachi Dolphins"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Karachi Dolphins", "Mohammad Sami"
+
+### Case 9
+**Question**: What season was it that the Portland Trail Blazers acquired the identical twin brother of Horace Grant, the same season that Chris Dudley had an ankle injury?
+**Expected**: 24th season
+**Predicted**: insufficient evidence
+**Hop 1 retrieval** (1/2 gold): MISSING — "Harvey Grant"
+**Hop 2 retrieval** (1/2 gold): MISSING — "1993–94 Portland Trail Blazers season"
+
+### Case 10
+**Question**: What German theoretical physicist has a chemistry rule named after him?
+**Expected**: Arnold Johannes Wilhelm Sommerfeld
+**Predicted**: insufficient evidence
+**Hop 1 retrieval** (0/2 gold): MISSING — "Arnold Sommerfeld", "Grimm–Sommerfeld rule"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Arnold Sommerfeld", "Grimm–Sommerfeld rule"
+
+_Use these failure cases to identify systematic weaknesses. MISSING retrieval entries indicate the BM25 query at that hop failed to surface key supporting documents — consider improving the query generation prompt for that step. Cases where retrieval succeeded but prediction was still wrong suggest reasoning or answer extraction issues._
+
+
+## CRITICAL FAILURE MODES (PRIORITIZE)
+1. Retrieval failure (MISSING gold docs): FIX Step 3 → output ONLY bare terms.
+2. Reasoning failure: FIX Steps 5-6.
+
+## MUTATION STRATEGY
+- If lineage shows stagnation (small fitness changes recently), PREFER EXPLORATION archetypes (4-6).
+- Act on insights by severity (high>med>low) and tag:
+    [beneficial] → PRESERVE/EXTEND
+    [harmful] → REMOVE
+    [fragile] → ROBUSTIFY
+    [rigid] → MAKE ADAPTABLE
+
+## OUTPUT RULES
+• Step 3: MUST output ONLY bare search terms (critical!)
+• system_prompt: ≤20 words (enforce).
+• Output ONLY the JSON below.
+
+## OUTPUT JSON
+{
+  "archetype": "Selected archetype name",
+  "justification": "2-3 sentences: why this mutation? Link insights to changes. Expected improvement?",
+  "insights_used": ["insight1 text", "insight2 text", ...],
+  "code": "FULL PYTHON CODE (raw, no markdown)"
+}

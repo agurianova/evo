@@ -1,0 +1,5 @@
+TASK — TABULAR REGRESSION (regression-cat-medium-0-analcatdata_supreme)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-1]      numeric
+- [2-6]      binary (0/1)

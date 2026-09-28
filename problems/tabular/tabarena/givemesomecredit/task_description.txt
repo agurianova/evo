@@ -1,0 +1,13 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-givemesomecredit)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] RevolvingUtilizationOfUnsecuredLines numeric
+- [1] age         numeric
+- [2] NumberOfTime30-59DaysPastDueNotWorse numeric
+- [3] DebtRatio   numeric
+- [4] MonthlyIncome numeric
+- [5] NumberOfOpenCreditLinesAndLoans numeric
+- [6] NumberOfTimes90DaysLate numeric
+- [7] NumberRealEstateLoansOrLines numeric
+- [8] NumberOfTime60-89DaysPastDueNotWorse numeric
+- [9] NumberOfDependents numeric

@@ -1,0 +1,18 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-seismic-bumps)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] genergy     numeric
+- [1] gpuls       numeric
+- [2] gdenergy    numeric
+- [3] gdpuls      numeric
+- [4] nbumps      numeric
+- [5] nbumps2     numeric
+- [6] nbumps3     numeric
+- [7] nbumps4     numeric
+- [8] energy      numeric
+- [9] maxenergy   numeric
+- [10] nbumps5     binary (0/1)
+- [11] seismic     categorical (integer code), 2 levels: 0=a 1=b
+- [12] seismoacoustic categorical (integer code), 3 levels: 0=a 1=b 2=c
+- [13] shift       categorical (integer code), 2 levels: 0=N 1=W
+- [14] ghazard     categorical (integer code), 3 levels: 0=a 1=b 2=c

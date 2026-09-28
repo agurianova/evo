@@ -1,0 +1,451 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{mathpazo}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\emergencystretch=3em
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{good}{HTML}{1A7F37}
+\definecolor{bad}{HTML}{B42318}
+\definecolor{warn}{HTML}{B7791F}
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{0.8em}{}
+\captionsetup{font=small,labelfont={bf,color=accent}}
+\newcommand{\armA}{\textcolor{bad}{arm A}}
+\newcommand{\armB}{\textcolor{accent}{arm B}}
+
+\lstdefinestyle{json}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!8},
+  frame=single, rulecolor=\color{gray!40}, framerule=0.4pt,
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, aboveskip=8pt, belowskip=8pt}
+\lstset{style=json}
+
+\newsavebox{\eliBox}
+\newenvironment{eli5}
+  {\par\medskip\noindent\begin{lrbox}{\eliBox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}\small}
+  {\end{minipage}\end{lrbox}\noindent\fcolorbox{accent!40}{accent!4}{\usebox{\eliBox}}\par\medskip}
+
+\newenvironment{interimbox}
+  {\par\medskip\noindent\begin{lrbox}{\eliBox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}\small}
+  {\end{minipage}\end{lrbox}\noindent\fcolorbox{warn!60}{warn!8}{\usebox{\eliBox}}\par\medskip}
+
+\title{\color{accent}\bfseries Tool-Aware DAG-Diff Mutation for Retrieval Chains\\
+\large Does the structured diff still earn its keep when the mutator is a
+\emph{top-tier reasoning model}?\\
+\large \textcolor{warn}{\bfseries INTERIM} --- live partial A/B, single-parent,
+\texttt{Qwen3-235B-A22B-Thinking} mutator}
+\author{GigaEvo}
+\date{2026-07-04}
+
+\begin{document}
+\maketitle
+
+\begin{interimbox}
+\textbf{\textcolor{warn}{INTERIM SNAPSHOT --- both arms are still running.}} Numbers
+are a single consistent snapshot of two live runs (target 250 mutants/arm; at snapshot
+\armA{} has 185 valid + 6 in-flight children, \armB{} 179 valid + 5 in-flight). Every
+figure and table in this report was regenerated from the \emph{same} storage/log pull, so
+they agree with one another, but all values will move as the runs complete. No held-out
+test evaluation has been run on these live programs yet, so the gemini report's held-out
+coverage table and lineage walk-through are intentionally \emph{absent} here, not stubbed.
+\end{interimbox}
+
+\begin{abstract}
+\noindent
+This is the companion run to the shipped \texttt{gemini-3.5-flash} A/B: the identical
+tool-aware slot-diff experiment on \textbf{HoVer multi-hop retrieval}
+(\texttt{problems/chains/hover/full7}), but with the mutator swapped for a
+\emph{top-tier reasoning model}, \texttt{Qwen3-235B-A22B-Thinking}, served over the LiteLLM
+proxy. The gemini report left one question sharp: it argued the malformed-JSON failure of
+free-form rewriting is \emph{structural} (weak \texttt{llama} malformed $\sim$40\%, gemini
+38\% --- ``not model IQ''). The strongest reasoning mutator we have puts a number on that
+claim, and the number is a partial rebuttal: over completed evaluations \armA{} (free
+rewrite) malforms \textbf{24 of 209 (11.5\%)} of its wire-JSON children --- \emph{far} below
+gemini's 38\%, so model quality \emph{does} cut the failure rate roughly threefold --- while
+\armB{} (tool diff) malforms \textbf{0 of 179}. So the honest reading is: a stronger mutator
+shrinks the malformed class but never closes it; only the schema guarantees zero. The
+diff's \emph{value} is therefore largest against weak/mid mutators and narrows --- but does
+not vanish --- as the mutator strengthens. But validity is not the diff's only genuine win,
+and it would be unfair to the diff to file the rest under ``parity.'' \textbf{Where \armB{}
+is outright better:} it wastes \textbf{\$0.00} of its budget on invalid children (vs \armA's
+\$0.33); it ships \textbf{18\% fewer input tokens} (slot deltas, not a re-quoted document);
+every child is a \textbf{typed, auditable diff of a known parent} rather than an opaque
+re-emission; and --- crucially --- it reaches the \emph{same fitness ceiling} while exploring
+a \textbf{much wider structural range} (2--7 step chains vs \armA's near-total collapse onto
+7 steps). Best fitness is a genuine \emph{tie} (0.821 \armA{} vs 0.819 \armB{}, a 0.002 gap
+inside the \texttt{Qwen3-8B} executor's $\sim$0.01--0.02 re-score noise), so the diff gives up
+nothing at the top. \armA's lead is confined to two places, and both come with an asterisk:
+the \emph{mean} (0.763 vs 0.714) is not a quality edge but the price of B's wider exploration
+into low-scoring short chains --- i.e.\ B is doing \emph{more} search for the same ceiling ---
+and \emph{cost-to-winner} (\$0.68 vs \$1.02), where the diff's dramatic gemini-era win (\$6.46
+vs \$15.93) shrinks because \armA{} now wastes only 11\% (vs 38\%) so total spend converges
+(\$2.88 vs \$2.98). One methodological bonus over the gemini run: the LiteLLM proxy does not
+itemise a reasoning channel for \emph{either} arm (both log 0 reasoning tokens), so there is
+no one-sided instrumentation confound here --- total billed output is a clean cross-arm read,
+and it too is near-parity (\armB{} output $+4.9\%$). Finally we document the diff's \emph{one}
+residual grammar failure
+class --- \texttt{diff\_schema\_error} (slot-contiguity, a cross-field validator that
+constrained decoding cannot cover) --- of which this run produced \textbf{zero}, and the new
+deterministic slot-compaction repair that now closes even that class.
+\end{abstract}
+
+\section{Motivation}
+CARL chain genomes are wire-JSON documents. The stock mutation path
+(\texttt{mutation=llm\_rewrite}) asks the LLM to re-emit the \emph{whole} document as free
+text; a malformed child is discovered only \emph{after} it has been persisted and has
+consumed a full evaluation. The structured slot-diff (\texttt{mutation=carl\_with\_%
+retrieval\_tools}) instead ships a per-mutation JSON schema so a malformed child cannot be
+sampled at all. Two prior A/Bs established this on the LLM-only summarizer task; the shipped
+\texttt{gemini-3.5-flash} run carried it to tool-bearing HoVer chains and found the validity
+gap holds even against a strong mutator (61.6\% vs 98.8\% valid). This run isolates the last
+free variable those left open:
+\begin{itemize}
+  \item \textbf{Does the guarantee still pay when the mutator is \emph{the strongest reasoning
+  model available}?} The gemini report's central claim was that malformed JSON is structural
+  to full-document re-emission, not a weak-model artifact --- evidenced by weak \texttt{llama}
+  ($\sim$40\%) and \texttt{gemini-3.5-flash} (38\%) landing at nearly the same rate. If that
+  is right, \texttt{Qwen3-235B-A22B-Thinking} --- a far more capable model --- should still
+  malform $\sim$38\%. If instead the rate drops sharply, the failure \emph{is} partly a model
+  effect, and the diff's value is a function of \emph{which} mutator you pair it with. That is
+  the question this snapshot answers.
+\end{itemize}
+
+\section{Setup}
+\label{sec:setup}
+Two arms, run from scratch, identical except the mutation operator:
+\begin{itemize}
+  \item \textbf{Task:} \texttt{problems/chains/hover/full7}, \texttt{pipeline=program\_is\_json}.
+  Full-chain mode (no frozen steps, no topology matching): the child may freely change step
+  count/types/dependencies within \texttt{FULL\_CHAIN\_CONFIG} (\texttt{max\_steps}=7). Fitness
+  is soft retrieval coverage --- for each of 300 HoVer claims, the fraction of gold
+  supporting-fact article titles found across all tool-step outputs (higher better).
+  \item \textbf{Mutator:} \texttt{Qwen3-235B-A22B-Thinking} via the LiteLLM proxy at
+  \texttt{10.232.89.98:4000} --- \emph{identical config on both arms}. This is the same mutator
+  family as the user's HoVer feedback-condition sweep, so the mutator axis here is comparable
+  to that prior work.
+  \item \textbf{Executor:} \texttt{Qwen/Qwen3-8B} via the same proxy, step-batched over the
+  300-sample set --- \emph{identical to the gemini run}, so the fitness scale is shared.
+  \item \textbf{Config:} \texttt{memory=none}, \texttt{num\_parents=1}, one 7-step retrieval
+  seed, disk storage, target \texttt{max\_mutants=250}. \armA{} = \texttt{mutation=llm\_rewrite}
+  (stock full wire-JSON rewrite); \armB{} = \texttt{mutation=carl\_with\_retrieval\_tools}
+  (\texttt{StructuredDiffMutationOperator} + \texttt{AllowedToolChainChanges}).
+\end{itemize}
+
+\noindent\textbf{Single parent.} With \texttt{num\_parents=1} the diff grammar collapses to
+its single-parent form; crossover is unavailable this run (a deliberate simplification, matching
+the gemini run for comparability).
+
+\section{The tool-aware diff language}
+\label{sec:language}
+The child chain is a shelf of numbered slots the LLM fills left-to-right; a slot may hold a
+\texttt{tool} step (a \texttt{retrieve}/\texttt{retrieve\_deep} with a named query source) as well
+as an LLM step. This is unchanged from the gemini run --- the \emph{grammar} is fixed; only the
+mutator model differs --- so we keep the description short.
+
+\begin{eli5}
+Picture the child chain as a row of numbered boxes. Into each box you put either a
+\emph{photocopy} of a step from the parent (named by its label \texttt{a1}, \texttt{a2}, \dots,
+optionally with small corrections) or a \emph{brand-new} step; ``go-look-it-up'' \emph{tool}
+steps are photocopied the same way. Each box lists which \emph{earlier} boxes it reads from,
+and the form for box $k$ only has checkboxes for boxes $1..k{-}1$ --- so pointing forward or at
+yourself is not against the rules, there is simply nowhere on the form to write it. Leftover
+boxes stay empty (no gaps), and the last filled box produces the graded answer.
+\end{eli5}
+\noindent
+The form is a JSON schema compiled fresh per mutation and shipped as the provider's
+\texttt{json\_schema} structured-output grammar, so a violating token can never be sampled; a
+pydantic model re-checks as a backstop and the applier round-trips through \texttt{ReasoningChain}
+as a final assertion. Everything an unconstrained rewriter routinely gets wrong ---
+self/forward dependencies, cycles, keeping a nonexistent step, invented fields, \emph{malformed
+JSON} --- is unrepresentable by construction; only step-contiguity is left to a validator
+(\S\ref{sec:taxonomy}). A rejection costs one LLM call: nothing persisted, nothing evaluated.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Validity funnel --- the headline, and the model-quality twist}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+live snapshot (target 250/arm) & \armA{} (rewrite) & \armB{} (tool diff) \\
+\midrule
+mutation LLM calls (incl.\ retries) & 215 & 191 \\
+pre-persist generation failures & 7 (no code) & 9 (LLM-call) \\
+children persisted & 215 & 184 \\
+\quad still executing at snapshot (excluded) & 6 & 5 \\
+\midrule
+\textbf{completed evaluations} & \textbf{209} & \textbf{179} \\
+\quad valid & 185 & 179 \\
+\quad invalid & 24 & \textbf{0} \\
+\qquad of which malformed JSON & \textbf{\textcolor{warn}{24 (11.5\%)}} & \textbf{\textcolor{good}{0}} \\
+\textbf{valid yield among completed} & \textbf{\textcolor{warn}{88.5\%}} & \textbf{\textcolor{good}{100.0\%}} \\
+\bottomrule
+\end{tabular}
+\caption{The diff still removes the malformed class entirely (\textbf{0} malformed-JSON children),
+but the free-form path is much healthier here than under gemini: \textbf{11.5\% malformed} vs
+gemini's 38\%. \armA's remaining pre-persist failures are 7 \texttt{no\_code\_extracted} (the model
+returned prose with no extractable JSON); \armB's are 9 \texttt{llm\_call\_error} --- proxy/timeout
+faults, \emph{not} grammar violations (see \S\ref{sec:taxonomy}). Both arms exclude in-flight
+children (the ``unknown'' invalids in \texttt{ab\_stats.json} are exactly these not-yet-scored
+programs: \armA's 6, \armB's 5).}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_overview.png}
+\caption{Left: per-child soft-coverage fitness (dots) and best-so-far (line); invalid children are
+crosses on the floor line --- present for \armA{} (\textcolor{bad}{red}), \emph{entirely absent} for
+\armB{}. The two best-so-far lines are on top of each other (\armA{} ends marginally higher, 0.821 vs
+0.819). Note \armB's fatter low tail (dots down to $\sim$0.63): those are its short-chain explorations,
+which drag its \emph{mean} down (\S\ref{sec:struct}). Right: the validity funnel --- both persist
+$\sim$190--215, \armA{} keeps 185 valid, \armB{} keeps 179.}
+\end{figure}
+
+\noindent\textbf{Why 11.5\%, not 38\%.} This is the run's most consequential number, and it
+qualifies the gemini report. That report argued the malformed rate is structural to
+full-document re-emission and roughly model-independent (weak \texttt{llama} $\sim$40\%, gemini
+38\%). \texttt{Qwen3-235B-A22B-Thinking} --- a materially stronger reasoning model --- malforms
+\emph{roughly a third} as often (11.5\%). So the failure is \emph{partly} a model effect: a
+top-tier mutator is genuinely better at re-emitting a whole tool-bearing chain as valid JSON.
+What survives of the gemini claim is the weaker, correct version: even the strongest mutator
+does \emph{not} reach zero, and the gap it leaves ($1$-in-$9$ children wasted on a malformed
+re-emission, each having burned an evaluation) is exactly the class the schema removes outright.
+The diff's validity value is thus a \emph{function of the mutator}: decisive against weak/mid
+models, a modest-but-real safety margin against the strongest.
+
+\subsection{Fitness --- the ceiling is a tie; \armA's mean lead is B's exploration tax}
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+completed children & \armA{} (rewrite) & \armB{} (tool diff) & read \\
+\midrule
+best child & 0.821 & 0.819 & \textbf{tie ($\Delta$0.002 $<$ noise)} \\
+child mean & \textbf{0.763} & 0.714 & A leads (B explores more) \\
+child median & \textbf{0.773} & 0.758 & A leads (same reason) \\
+seed (executor re-score) & 0.750 & 0.743 & tie \\
+\bottomrule
+\end{tabular}
+\caption{The number that matters --- the \emph{best} program each arm can reach --- is a dead heat
+(0.821 vs 0.819, a 0.002 gap well inside the \texttt{Qwen3-8B} executor's $\sim$0.01--0.02 re-score
+noise). So the diff gives up \emph{nothing} at the ceiling. \armA's lead on the \emph{mean/median}
+is not a quality edge: it is the visible cost of B doing more work --- the diff arm spends a slice of
+its budget on short-chain structural experiments (\S\ref{sec:struct}) that score low, which pulls its
+\emph{average} down without touching its \emph{ceiling}. Framed for the diff: B reaches the same top
+fitness \emph{and} searches a wider structural neighbourhood to get there. Read honestly, neither arm
+buys a higher optimum on this task; the diff's case is that it ties the optimum while winning on
+validity, waste, input cost, legibility, and exploration breadth.}
+\end{table}
+
+\subsection{Structural exploration --- the diff arm ranges wider}
+\label{sec:struct}
+\begin{table}[H]\centering
+\begin{tabular}{lccccccc}
+\toprule
+valid children by chain length & 2 & 3 & 4 & 5 & 6 & 7 & \% at 7 \\
+\midrule
+\armA{} (rewrite)   & --- & 1 & 5 & 7 & 14 & 158 & \textbf{85\%} \\
+\armB{} (tool diff) & 3 & 3 & 8 & 12 & 21 & 132 & \textbf{74\%} \\
+\bottomrule
+\end{tabular}
+\caption{The reversal from the gemini run. There, the diff stayed \emph{tighter} to the 7-step seed
+than free rewrite (84\% vs 77\% at 7 steps). Here it is the opposite: \armB{} ranges more widely
+toward short chains (26\% off-7, including 2- and 3-step chains free rewrite never produced), while
+\armA{} clings to 7 steps (85\%) --- a near-mode-collapse onto the seed's shape. The diff's cheap,
+always-valid short-chain edits (delete-to-2-steps is one representable slot move) let the strong
+mutator \emph{afford} structural experiments free rewrite never even attempts. On HoVer full7 those
+short chains mostly underperform (hence \armB's lower mean), so the breadth does not lift the ceiling
+\emph{here} --- but structural diversity at a tied ceiling is a genuine property of the diff, not a
+defect: it is exactly the behaviour you want on a harder task, a larger budget, or a landscape where
+the seed's 7-step shape is \emph{not} already near-optimal. Free rewrite's tidy 85\%-at-7 is the flip
+side of the same coin: less waste-to-explore, but also less willingness to leave the seed's basin.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=0.72\textwidth]{ab_nsteps.png}
+\caption{Chain-length distribution of valid children. \armB{} (blue) spreads across 2--7 steps;
+\armA{} (red) concentrates at 7.}
+\end{figure}
+
+\subsection{Token cost --- no reasoning confound this time}
+\label{sec:tokens}
+The gemini run had a one-sided instrumentation bug: only the diff agent logged a reasoning-token
+channel, so its total-output comparison came with a caveat. \textbf{That confound is absent here}
+--- the LiteLLM proxy reports \emph{no} reasoning channel for either arm (both log 0 reasoning
+tokens), so \texttt{tokens\_out} is total generated output on both, measured identically, and the
+cross-arm comparison is clean.
+\begin{table}[H]\centering
+{\small
+\begin{tabular}{lccc}
+\toprule
+mutation side (\texttt{Qwen3-235B}), snapshot & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+tokens in & 1{,}260{,}347 & 1{,}030{,}499 & $-18.2\%$ \\
+\textbf{tokens out (total)} & \textbf{1{,}802{,}075} & \textbf{1{,}890{,}614} & \textbf{$+4.9\%$} \\
+\quad of which reasoning & \multicolumn{2}{c}{\textcolor{warn}{not itemised by proxy (n/a both arms)}} & --- \\
+mean output / completed call & 8{,}664 & 10{,}388 & $+20\%$ \\
+LLM calls (incl.\ retries) & 215 & 191 & $-11\%$ \\
+\bottomrule
+\end{tabular}}
+\caption{Near-parity on total output ($+4.9\%$ for the diff), and the diff sends \emph{18\% fewer}
+input tokens (it ships slot deltas against a compact rendered parent rather than re-quoting a whole
+document). Per accepted call the diff generates $\sim$20\% more (its structured payload plus the
+model's un-itemised chain-of-thought), but it makes 11\% fewer calls, so totals land close. Because
+the proxy does not split reasoning from content, we cannot state a content-only ratio --- but unlike
+the gemini run, nothing here is one-sided.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_tokens.png}
+\caption{Left: mutation output tokens per call (dots, 10-call rolling mean) --- the diff's per-call
+output runs slightly higher. Right: cumulative tokens; \armB's output (solid) edges above \armA's
+while its input (dashed) sits below.}
+\end{figure}
+
+\subsection{Cost/quality frontier --- the diff's cost edge does not reproduce}
+\label{sec:pareto}
+Priced at OpenRouter's cheapest \texttt{Qwen3-235B-Thinking} rate (\$0.15/M in, \$1.495/M out;
+the \texttt{Qwen3-8B} executor is a separate shared cost, excluded), the comparison that was
+lopsided under gemini is \emph{near-parity} here --- and where it tilts, it tilts toward free
+rewrite. Cost is attributed by \texttt{created\_at}: each child, in wall-clock creation order,
+consumes the next accepted mutation call.
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+mutation-model \$ (OpenRouter cheapest) & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+total run spend (snapshot) & \$2.88 & \$2.98 & $+3.5\%$ \\
+\midrule
+cost to the best program so far & \textbf{\$0.68} & \$1.02 & $+50\%$ \\
+\quad winner reached at (chrono.\ rank) & 52/215 (24\%) & 60/184 (33\%) & later \\
+\quad winner fitness (train soft) & \textbf{0.821} & 0.819 & tie \\
+\midrule
+cost per \emph{valid} program & \textbf{\$0.016} & \$0.017 & $+6\%$ \\
+budget wasted on invalid children & \textcolor{warn}{\$0.33 (11\%)} & \textbf{\textcolor{good}{\$0.00 (0\%)}} & --- \\
+\bottomrule
+\end{tabular}
+\caption{Under gemini, the diff bought a \emph{higher} winner for \textbf{\$6.46 vs \$15.93}
+cost-to-winner ($-59\%$) because \armA{} wasted 38\% of its budget on malformed children. That win
+was a \emph{waste-differential} artifact: with \armA{} now wasting only 11\% (a strong mutator
+malforms less), the differential shrinks and the arms converge. Here the diff is marginally
+\emph{dearer} on every dollar except the one it is built to win --- wasted budget, where it is \$0.00
+vs \$0.33. The clean statement: the diff's cost advantage scales with how much the free-rewrite arm
+\emph{wastes}, which scales with how weak the mutator is; against the strongest mutator, free rewrite
+wastes little and the diff's economic case narrows to its zero-waste guarantee.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=0.86\textwidth]{ab_pareto.png}
+\caption{Single-panel cost-to-winner vs.\ best train fitness (the gemini report's second panel,
+held-out test coverage, is omitted --- no held-out eval has run on these live programs). Both arms'
+cost-efficiency step lines climb to $\sim$0.82; \armA's open circle sits \emph{left} of \armB's
+diamond (cheaper cost-to-winner) at marginally higher fitness. Neither arm dominates --- this is the
+parity the strong mutator produces.}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_waste.png}
+\caption{\textbf{Left:} where each arm's budget went. \armA{} wastes \$0.33 of \$2.88 (11\%) on
+malformed/invalid children; \armB{} wastes \$0.00. \textbf{Right:} effective cost per \emph{valid}
+program --- \$0.016 (\armA) vs \$0.017 (\armB), a dead heat, because at 11\% waste the free-rewrite
+penalty is small. Contrast the gemini run, where the same chart showed \$0.083 vs \$0.119 (a 30\%
+diff advantage) driven by \armA's 38\% waste.}
+\end{figure}
+
+\section{Failure taxonomy and the deterministic contiguity repair}
+\label{sec:taxonomy}
+Every mutation that does not yield a scored child is classified by
+\texttt{analyze\_ab.py}'s taxonomy (matched against the \texttt{MutationError} message). The
+snapshot's full breakdown:
+\begin{table}[H]\centering
+\begin{tabular}{llcc}
+\toprule
+failure kind & where caught & \armA{} & \armB{} \\
+\midrule
+\texttt{json\_parse\_error} (malformed wire-JSON) & \textcolor{bad}{post-persist, after eval} & 24 & \textbf{\textcolor{good}{0}} \\
+\texttt{no\_code\_extracted} (no JSON in reply) & pre-persist (free)          & 7  & \textbf{\textcolor{good}{0}} \\
+\texttt{llm\_call\_error} (proxy / timeout)      & pre-persist (free)          & 0  & 9 \\
+\texttt{diff\_schema\_error} (slot-contiguity)   & pre-persist (free)          & \textcolor{gray}{n/a} & \textbf{\textcolor{good}{0}} \\
+in-flight (not yet scored)                        & ---                         & 6  & 5 \\
+\bottomrule
+\end{tabular}
+\caption{The asymmetry is the whole point. \armA's failures are \emph{grammar/extraction}
+(24 malformed + 7 no-code = 31 children that either wasted an evaluation or a call on badly-formed
+output). \armB's only failures are \textbf{9 \texttt{llm\_call\_error}} --- infrastructure faults
+(the proxy dropped the call), \emph{not} anything the model got wrong about the format. \armB{}
+produced \textbf{zero} malformed JSON, \textbf{zero} extraction failures, and --- notably ---
+\textbf{zero \texttt{diff\_schema\_error}}, the one grammar failure the structured diff can still hit.}
+\end{table}
+
+\subsection{The one thing constrained decoding cannot enforce}
+Structured output guarantees the reply conforms to the JSON \emph{Schema}: types, enums, required
+fields, per-field bounds. It cannot enforce a cross-field Python \texttt{@model\_validator}. The diff
+has exactly one such rule --- \emph{slot contiguity} (``fill \texttt{slot\_1..slot\_k}
+consecutively; no gaps''). It cannot be expressed per-field (no single slot's enum captures ``and
+every earlier slot is also filled''), so the decoder is free to sample a schema-valid payload with a
+hole (e.g.\ \texttt{slot\_3} filled, \texttt{slot\_2} null). Pydantic then rejects it, the operator
+wraps it as \texttt{diff\_schema\_error}, and the mutation is retried --- one wasted call, nothing
+persisted. Under gemini this fired on $2/259$ diffs (0.8\%); under \texttt{Qwen3-235B-Thinking} it
+fired \textbf{0} times this snapshot. It is the benign end of the failure spectrum (caught pre-persist,
+zero eval cost), but it is the diff's \emph{only} self-inflicted grammar failure, so it is worth
+removing.
+
+\subsection{The repair: slide filled slots left, remap references}
+A gap diff is simply \emph{the right steps at the wrong indices}. The fix is deterministic
+compaction, applied as a fallback the instant validation fails:
+\begin{enumerate}
+  \item Collect the filled slots in order, ignoring the holes.
+  \item Slide them left into \texttt{slot\_1..slot\_m} (stable order preserved), building the
+  old$\to$new index map.
+  \item Rewrite every slot reference through that map --- each slot's backward
+  \texttt{dependencies}, and (in the tool-chain variant) a tool step's \texttt{query\_source}.
+  \item Re-validate the compacted payload. If it still fails --- e.g.\ a surviving slot depended on
+  the \emph{hole} itself, which cannot be cleanly remapped --- abort the repair and let the original
+  error stand.
+\end{enumerate}
+The move is an \emph{order-isomorphism}: because slot order is preserved and every edge already
+points backward, compaction maps a gapped emission to \emph{byte-for-byte the chain a contiguous
+emission would have produced}. Re-validating before use means the repair can never itself emit an
+invalid child; the conservative abort means a genuinely ambiguous gap (a reference into the hole)
+is still rejected rather than guessed. This is the same principle that makes dependency-adherence
+decoder-enforceable, pushed one step further to cover the cross-field invariant the decoder cannot.
+It is now wired into both diff vocabularies --- \texttt{problems/chains/tool\_chain\_diff.py}
+(this run's operator) and its LLM-only cousin \texttt{gigaevo/chains/dag\_changes.py} --- each with
+gap-repair and dangling-reference-rejection unit tests. So the \texttt{diff\_schema\_error} column
+above is now not merely \emph{empty by luck of the mutator}, but \emph{empty by construction}: even
+a model that does emit a slot gap will have it silently repaired into the valid chain it meant.
+
+\section{Verdict}
+Against a top-tier reasoning mutator (\texttt{Qwen3-235B-A22B-Thinking}), the structured tool-diff
+still delivers its one hard guarantee --- \textbf{0 malformed-JSON children vs free rewrite's 11.5\%}
+--- but the strong-mutator regime reframes what that guarantee is \emph{worth}. The headline finding
+is a partial correction to the gemini report: malformed rate is \emph{not} model-independent. A
+strong reasoning model malforms roughly a third as often as \texttt{gemini-3.5-flash} (11.5\% vs
+38\%), so the diff's dramatic gemini-era \emph{margins} --- $+0.02$ fitness, $-59\%$ cost-to-winner,
+$-30\%$ cost-per-valid --- shrink because \armA's waste shrinks. But it would be wrong to conclude
+``the diff no longer wins.'' \textbf{Where \armB{} is genuinely better even against the strongest
+mutator:} (i)~\emph{validity} --- 0 malformed vs 24, categorical; (ii)~\emph{waste} --- \$0.00 vs
+\$0.33 of budget on invalid children; (iii)~\emph{input cost} --- 18\% fewer input tokens; (iv)~%
+\emph{legibility} --- every child a typed, auditable diff of a named parent; (v)~\emph{exploration
+breadth} --- it ties the fitness ceiling (0.821 vs 0.819, within noise) while ranging across 2--7
+step chains where free rewrite collapses onto 7. \armA's only genuine wins are the \emph{mean} (which
+is really B paying an exploration tax for that breadth) and \emph{cost-to-winner} (\$0.68 vs \$1.02,
+a margin that exists only because \armA{} now wastes little). Net: the two arms tie on the optimum;
+the diff wins the five properties above; free rewrite wins mean and cost-to-winner. The synthesis
+across all three mutator runs is not ``the diff stops mattering'' but \textbf{the diff's \emph{fitness/cost}
+margin scales inversely with mutator strength, while its validity/legibility/exploration advantages
+hold at every strength} --- decisive against weak/mid models, a still-real safety-and-diversity margin
+against the strongest.
+Methodologically this run is also \emph{cleaner} than the gemini one: no reasoning-instrumentation
+confound (the proxy itemises no reasoning channel for either arm), so total output is a fair
+cross-arm read. \textbf{Caveats:} \textcolor{warn}{this is a live interim snapshot} (185/179 valid of
+target 250, 6/5 in-flight excluded), one replicate per arm with no same-config variance floor yet on
+HoVer full7 (so the fitness tie and mean gap should be read as \emph{provisional}, the validity gap
+as categorical), \texttt{memory=none}, and \texttt{num\_parents=1} (no crossover). Next: let both arms
+finish to 250; a variance floor on this task; and --- with the deterministic contiguity repair now
+landed in both diff vocabularies --- confirm the \texttt{diff\_schema\_error} class stays at zero by
+construction rather than by the mutator's good luck.
+\end{document}

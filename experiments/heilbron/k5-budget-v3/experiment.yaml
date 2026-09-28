@@ -1,0 +1,350 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/k5-budget-v3
+    task: heilbron
+    branch: exp/heilbron/k5-budget-v3
+    pr_number: null
+    tracking_issue: null
+    prereg_commit: null
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    pipeline: adversarial_asymmetric_v3
+    shared_overrides:
+      num_parents: 1
+      max_elites_per_generation: 8
+      max_mutations_per_generation: 8
+      stage_timeout: 2400
+      dag_timeout: 2400
+      mutation_mode: rewrite
+      inner_iterations: 1
+      n_opponents: 3
+      source_prompt_k: 3
+      llm: single
+      llm_base_url: http://10.232.30.185:4000/v1
+      model_name: Qwen3-235B-A22B-Thinking-2507
+  runs:
+  - label: K3_1_G
+    db: 1
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_a
+    condition: v3_k3_run_1
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622655
+    log_path: run_K3_1_G.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_a
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=1
+    - evolution=steady_state
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - algorithm=single_island_2d_g
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=3
+    - opponent_provider.fitness_key=fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=constructor
+    role: constructor
+  - label: K3_1_D
+    db: 2
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_b
+    condition: v3_k3_run_1
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622656
+    log_path: run_K3_1_D.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_b
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=2
+    - evolution=steady_state
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - algorithm=single_island_2d_d
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=3
+    - opponent_provider.fitness_key=actual_fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=improver
+    role: improver
+  - label: K3_2_G
+    db: 3
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_a
+    condition: v3_k3_run_2
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622657
+    log_path: run_K3_2_G.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_a
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=3
+    - evolution=steady_state
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - algorithm=single_island_2d_g
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=3
+    - opponent_provider.fitness_key=fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=constructor
+    role: constructor
+  - label: K3_2_D
+    db: 4
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_b
+    condition: v3_k3_run_2
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622658
+    log_path: run_K3_2_D.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_b
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=4
+    - evolution=steady_state
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - algorithm=single_island_2d_d
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=3
+    - opponent_provider.fitness_key=actual_fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=improver
+    role: improver
+  - label: K5_1_G
+    db: 5
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_a
+    condition: v3_k5_run_1
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622659
+    log_path: run_K5_1_G.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_a
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=5
+    - evolution=steady_state
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - algorithm=single_island_2d_g
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=5
+    - opponent_provider.fitness_key=fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=constructor
+    role: constructor
+  - label: K5_1_D
+    db: 6
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_b
+    condition: v3_k5_run_1
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622661
+    log_path: run_K5_1_D.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_b
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=6
+    - evolution=steady_state
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - algorithm=single_island_2d_d
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=5
+    - opponent_provider.fitness_key=actual_fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=improver
+    role: improver
+  - label: K5_2_G
+    db: 7
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_a
+    condition: v3_k5_run_2
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622662
+    log_path: run_K5_2_G.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_a
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=7
+    - evolution=steady_state
+    - opponent_redis_db=8
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - algorithm=single_island_2d_g
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=5
+    - opponent_provider.fitness_key=fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=constructor
+    role: constructor
+  - label: K5_2_D
+    db: 8
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric_v3
+    problem_name: heilbron_adversarial/pop_b
+    condition: v3_k5_run_2
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3622663
+    log_path: run_K5_2_D.log
+    extra_overrides:
+    - problem.name=heilbron_adversarial/pop_b
+    - pipeline=adversarial_asymmetric_v3
+    - redis.db=8
+    - evolution=steady_state
+    - opponent_redis_db=7
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - algorithm=single_island_2d_d
+    - pipeline_builder.archive_reeval=true
+    - n_opponents=5
+    - opponent_provider.fitness_key=actual_fitness
+    - opponent_provider.k=3
+    - opponent_provider.higher_is_better=true
+    - population_role=improver
+    role: improver
+  servers:
+  - mutation-1
+  - mutation-2
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 50
+  stopping_rule:
+    description: max_generations=50 (post-hoc BD correlation analysis only; no futility
+      stop because v3's primary outcome is archive-structure health, not fitness peak)
+    conditions:
+    - kind: max_generations
+      threshold: 50
+      note: hard stop at gen 50
+    enforce_at: checkpoint
+  baseline:
+    reference: heilbron/k5-budget-v2
+    mean: 0.03449
+    metric: actual_fitness (best-overall)
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-18T10:48:42.033145+00:00'
+    commit: 5f69378075f4918f01c0e801764b98e186cd1021
+    confirmed_at: '2026-04-18T10:48:42.033145+00:00'
+  smoke_test:
+    completed: true
+    db: 2
+    generations: 3
+    log_path: /tmp/smoke_v3_final/pop_b.log
+    completed_at: '2026-04-18T07:20:20Z'
+    note: "PASS under simpler NEVER-rule (current autonomous directive): pop_b LINEAGE_TREND\
+      \ trend!=null=151 in 8-gen, treatment_verification.completed=true. HOF_ROTATE=0\
+      \ acknowledged as known gap (task #28 \u2014 not required by current gate)."
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-18T07:20:23Z'
+    note: 'Phase E treatment-verifier + implementation-aligner PASSED. Phase F 8-gen
+      log_audit PASSED (pop_b: 1155 events, LT trend!=null=151; pop_a: 845 events).
+      Chaos-hacker 14 findings with 3 CRITICAL all triaged as non-blockers in VERIFICATION.md.'
+telemetry:
+  checkpoints: []
+  mid_run_test_eval:
+    completed: false
+    completed_at: null
+  checkpoint_analysis:
+    mid_run:
+      completed: false
+      completed_at: null
+  treatment_checks:
+    completed: false
+    completed_at: null
+    results: []
+control_plane:
+  watchdog:
+    plugin: adversarial
+    sentinel_value: -1.0
+    plot_metrics:
+    - actual_fitness
+    - fitness
+    - wins
+    plot_commands:
+    - command: arms-race
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        bands: true
+        show-max: true
+        annotate-frontier: true
+        max-annotations: 3
+      output_name: arms_race.png
+      caption: Arms-race dynamics (G vs D, v3 2D MAP-Elites)
+    - command: comparison
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        annotate-frontier: true
+        max-annotations: 3
+      output_name: evolution_runs_comparison.png
+      caption: v3 runs vs v2 baseline (max_elites 0.03449)
+    alert_thresholds:
+      invalidity_rate: 0.75
+      stagnation_window: 10
+      generation_gap_threshold: 5
+    poll_interval_s: 3600
+    plot_retries: 3
+    plot_retry_delay_s: 30
+    rolling_comment_threshold_hours: 24
+    checkpoint_milestones:
+    - 0.1
+    - 0.2
+    - 0.5
+    - 1.0
+    no_proxy_hosts: []
+    pid: null
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 3628190
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null
+status: implemented

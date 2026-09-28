@@ -1,0 +1,44 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-qsar-biodeg)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Laplace_Leading_Eigenvalue numeric
+- [1] Weighted_Balaban_Index_Barysz_Matrix numeric
+- [2] Num_Heavy_Atoms numeric
+- [3] Freq_NN_At_Dist1 numeric
+- [4] Freq_CN_At_Dist4 numeric
+- [5] Num_ssssC_Atoms numeric
+- [6] Num_Substituted_BenzeneC numeric
+- [7] Percentage_C_Atoms numeric
+- [8] Num_Terminal_PrimaryC numeric
+- [9] Num_Oxygen_Atoms numeric
+- [10] Freq_CN_At_Dist3 numeric
+- [11] Sum_dssC_EStates numeric
+- [12] Weighted_HyperWiener_Index_Burden_Matrix numeric
+- [13] Lopping_Centric_Index numeric
+- [14] Laplace_Spectral_Moment6 numeric
+- [15] Freq_CO_At_Dist3 numeric
+- [16] Mean_Sanderson_Electronegativity numeric
+- [17] Mean_Ionization_Potential numeric
+- [18] Num_N_Hydrazine numeric
+- [19] Num_Aromatic_Nitro_Groups numeric
+- [20] Num_CRX3    numeric
+- [21] Weighted_Normalized_SpectralPositiveSum_Burden_Matrix numeric
+- [22] Num_Circuits numeric
+- [23] Adjacency_LeadingEigenvalue numeric
+- [24] Intrinsic_State_Pseudoconnectivity numeric
+- [25] Sum_dO_EStates numeric
+- [26] Laplace_MoharIndex2 numeric
+- [27] Num_RingTertiaryC numeric
+- [28] Freq_CN_At_Dist2 numeric
+- [29] Num_HBond_Donors_Atoms numeric
+- [30] Weighted_LeadingEigenvalue_Burden_Matrix numeric
+- [31] Intrinsic_State_Pseudoconnectivity_SAvg numeric
+- [32] Num_Nitrogen_Atoms numeric
+- [33] Weighted_SpectralMoment6_Burden_Matrix numeric
+- [34] Num_Esters  numeric
+- [35] Num_Halogen_Atoms numeric
+- [36] Presence_CBr_At_Dist1 categorical (integer code), 2 levels: 0=0 1=1
+- [37] Presence_CCl_At_Dist3 categorical (integer code), 2 levels: 0=0 1=1
+- [38] N073_chemical_substructure categorical (integer code), 4 levels: 0=0 1=1 2=2 3=3
+- [39] Presence_CBr_At_Dist4 categorical (integer code), 2 levels: 0=0 1=1
+- [40] C026_chemical_substructure categorical (integer code), 9 levels: 0=0 1=1 2=10 3=2 4=3 5=4 6=5 7=6 8=9

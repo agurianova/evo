@@ -1,0 +1,55 @@
+# @package _global_
+# 2D MAP-Elites: compressed pathway (4) × interaction family (8) = 32 cells.
+# Fitness still decides replacement inside a cell.
+
+defaults:
+  - _base
+
+behavior_space:
+  _target_: gigaevo.config.helpers.build_behavior_space
+  keys:
+    - modality_mix
+    - interaction_kind
+  bounds:
+    - [-0.5, 3.5]
+    - [-0.5, 7.5]
+  resolutions:
+    - 4
+    - 8
+  binning_types:
+    - linear
+    - linear
+  model_transforms:
+    - linear
+    - linear
+  dynamic: false
+
+islands:
+  - _target_: gigaevo.evolution.strategies.map_elites.IslandConfig
+    island_id: ${island_id}
+    max_size: 32
+    behavior_space: ${ref:behavior_space}
+    archive_selector: ${archive_selector}
+    elite_selector:
+      _target_: gigaevo.evolution.strategies.map_elites.FitnessProportionalTournamentBoundedGapEliteSelector
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+      gap_factor: 1.5
+    archive_remover:
+      _target_: gigaevo.evolution.strategies.map_elites.FitnessArchiveRemover
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+    migrant_selector:
+      _target_: gigaevo.evolution.strategies.map_elites.TopFitnessMigrantSelector
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+    migration_rate: ${migration_rate}
+
+evolution_strategy:
+  _target_: gigaevo.evolution.strategies.map_elites.MapElitesMultiIsland
+  island_configs: ${islands}
+  program_storage: ${ref:program_storage}
+  archive_storage_factory: ${ref:archive_storage_factory}
+  migration_interval: ${migration_interval}
+  enable_migration: ${enable_migration}
+  max_migrants_per_island: ${max_migrants_per_island}

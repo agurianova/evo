@@ -1,0 +1,34 @@
+# @package _global_
+
+defaults:
+  - /experiment/base
+  - override /pipeline: guided
+  - override /memory: none
+  - override /program_format: json_document
+  - override /loader: tab_wpf_seed
+  - override /mutation: structured_diff_tab_wpf
+  - override /algorithm: tab_wpf_structure_2d
+  - _self_
+
+problem:
+  name: tab_wpf
+  dataset: california  # Unused; retained for the shared config schema.
+  evaluation_mode: sandbox
+  task_bank: ${oc.env:GIGAEVO_TAB_WPF_TASK_BANK,''}
+  task_split: meta_train
+
+memory_task_key: tab_wpf/sandbox_classifier_v2/meta_train/all
+
+hydra:
+  job:
+    env_set:
+      GIGAEVO_TAB_WPF_EVAL_MODE: ${problem.evaluation_mode}
+      GIGAEVO_TAB_WPF_TASK_BANK: ${problem.task_bank}
+      GIGAEVO_TAB_WPF_META_SPLIT: ${problem.task_split}
+      GIGAEVO_TAB_WPF_SAMPLE_SIZE: ${oc.env:GIGAEVO_TAB_WPF_SAMPLE_SIZE,''}
+      GIGAEVO_TAB_WPF_SAMPLE_SEED: ${oc.env:GIGAEVO_TAB_WPF_SAMPLE_SEED,0}
+
+# The launcher may bind a deterministic cohort through GIGAEVO_TAB_WPF_SAMPLE_*.
+max_in_flight: 2
+llm_max_concurrent: 2
+max_tokens: 8192

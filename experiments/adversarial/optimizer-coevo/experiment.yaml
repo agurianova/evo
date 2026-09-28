@@ -1,0 +1,130 @@
+schema_version: 2
+contract:
+  identity:
+    name: adversarial/optimizer-coevo
+    task: adversarial
+    branch: exp/adversarial-optimizer-coevo
+    prereg_commit: 172a83e
+    pr_number: 169
+    tracking_issue: null
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: fitness
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.01
+  runs:
+  - label: P1-A
+    db: 1
+    prefix: adversarial/optimizer_v2/pop_a
+    pipeline: adversarial_coevo
+    problem_name: adversarial/optimizer_v2/pop_a
+    condition: 'Pair 1: optimizer (co-evolution)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1959413
+    log_path: pop_a_pair1.log
+    extra_overrides:
+    - opponent_redis_db=2
+    - opponent_redis_prefix=adversarial/optimizer_v2/pop_b
+  - label: P1-B
+    db: 2
+    prefix: adversarial/optimizer_v2/pop_b
+    pipeline: adversarial_coevo
+    problem_name: adversarial/optimizer_v2/pop_b
+    condition: 'Pair 1: landscape (co-evolution)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1958285
+    log_path: pop_b_pair1.log
+    extra_overrides:
+    - opponent_redis_db=1
+    - opponent_redis_prefix=adversarial/optimizer_v2/pop_a
+  - label: P2-A
+    db: 3
+    prefix: adversarial/optimizer_v2/pop_a
+    pipeline: adversarial_coevo
+    problem_name: adversarial/optimizer_v2/pop_a
+    condition: 'Pair 2: optimizer (co-evolution)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1958286
+    log_path: pop_a_pair2.log
+    extra_overrides:
+    - opponent_redis_db=4
+    - opponent_redis_prefix=adversarial/optimizer_v2/pop_b
+  - label: P2-B
+    db: 4
+    prefix: adversarial/optimizer_v2/pop_b
+    pipeline: adversarial_coevo
+    problem_name: adversarial/optimizer_v2/pop_b
+    condition: 'Pair 2: landscape (co-evolution)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1958287
+    log_path: pop_b_pair2.log
+    extra_overrides:
+    - opponent_redis_db=3
+    - opponent_redis_prefix=adversarial/optimizer_v2/pop_a
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 20
+  stopping_rule:
+    description: ''
+    conditions: []
+    enforce_at: checkpoint
+  baseline:
+    reference: null
+    mean: null
+    metric: null
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-06T14:27:05.460601+00:00'
+    commit: ff4f972
+    confirmed_at: '2026-04-06T14:27:05.460615+00:00'
+  smoke_test:
+    completed: true
+    db: 14
+    generations: 3
+    log_path: /tmp/smoke_pop_a.log
+    completed_at: '2026-04-06T14:22:58.096290+00:00'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-06T14:23:56.151295+00:00'
+telemetry:
+  checkpoints: []
+  mid_run_test_eval: {}
+  checkpoint_analysis: {}
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 1961049
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

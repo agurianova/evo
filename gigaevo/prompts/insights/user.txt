@@ -1,0 +1,12 @@
+Analyze this program and extract up to {max_insights} insights to guide the next mutation.
+
+PROGRAM:
+```python
+{code}
+```
+
+CURRENT METRICS: {metrics}
+
+ERRORS: {error_section}
+
+Return a JSON array of up to {max_insights} insights matching the schema, OUTPUT structure, and RULES defined in the system prompt. Each `insight` text must contain Anchor + Mechanism + Substitute (≤35 words). No prose, no preamble, no fences.

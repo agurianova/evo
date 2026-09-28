@@ -1,0 +1,183 @@
+ImmRep25 pMHC-TCR recognition — evaluation protocol
+=====================================================
+Worktree : gigaevo-core-internal-pmhctcr-20260915
+Split    : problems/pmhctcr/splits/r0.json
+Code     : problems/pmhctcr/validate.py
+           problems/pmhctcr/evaluate.py
+           problems/pmhctcr/test.py
+           problems/pmhctcr/metrics.yaml
+Cohort   : report/r0_train_val_test.txt
+Generated: 2026-09-15
+
+This is pMHC-out evaluation. It is not TCR-out.
+
+
+1. Task
+-------
+Predict whether a TCR binds a pMHC complex.
+
+  unit     one complex = one (pMHC, TCR) pair = one row
+  label    1 = binder, 0 = non-binder
+  output   a real score per pair; higher = more likely binder
+           rank order matters; scores need not be calibrated probabilities
+
+Modalities available on each row (any subset may be used):
+  sequences   mhca, epitope, tcra, tcrb  (plus CDR3 / V/J gene columns)
+  structure   pdb_path → Boltz2 PDB
+  surface     masif_tcr_path, masif_pmhc_path → MaSIF-search npz
+              (tcr: desc / desc_straight; pmhc: desc / desc_flipped)
+
+
+2. Split (frozen r0)
+--------------------
+Split unit is mhc_epitope_id (pMHC). Not TCR. Not complex.
+
+  train  12 pMHCs, 5378 pairs, 541 pos   (fit only)
+  val     4 pMHCs, 1786 pairs, 183 pos   (evolution fitness)
+  test    4 pMHCs, 1772 pairs, 181 pos   (held-out report, once)
+
+Allele strata: 6+6 / 2+2 / 2+2 (HLA-A*02:01 + HLA-B*40:01).
+Each pMHC is in exactly one fold.
+All 8936 pairs are kept.
+The same TCR may appear in train and val/test with a different pMHC.
+
+
+3. Predictor API
+----------------
+entrypoint() must return an object with:
+
+  fit(train_df) -> None
+      train_df has labels. Fit state only on these rows.
+
+  score(rows_df) -> 1-d float array, length = len(rows_df)
+      rows_df has no label and no fold column (feature_frame drops them).
+      One score per row, finite, aligned with row order.
+      Higher score = predicted binder.
+
+GigaEvo calls entrypoint() once, then validate(payload).
+payload is the object returned by entrypoint(), or a zero-arg callable
+that returns that object.
+
+
+4. Two scoring stages
+---------------------
+Both stages fit on train from scratch, then score one held-out fold.
+
+  validate()     problems/pmhctcr/validate.py
+                 fit(train) → score(val)
+                 used as GigaEvo fitness during evolution
+                 must not read test labels or test pairs
+
+  score_on_test / test.py
+                 fit(train) → score(test)
+                 run once on the selected program
+                 not used to pick the program
+
+Val and test never enter fit().
+Test never enters validate().
+
+
+5. Metrics (ImmRep25, macro over pMHC)
+--------------------------------------
+For each pMHC k of the scored fold, with labels y_k and scores s_k:
+
+  AUCPR_k   sklearn average_precision_score(y_k, s_k)
+            area under the precision-recall curve
+
+  AUC0.1_k  sklearn roc_auc_score(y_k, s_k, max_fpr=0.1)
+            partial ROC AUC, FPR in [0, 0.1], McClish-standardised
+            this is the ImmRep25 / Kaggle definition
+            random ranking → 0.5 after McClish
+
+Requires at least two rows and both classes, and all scores finite.
+
+Macro = unweighted arithmetic mean over the 4 pMHCs (not pooled over pairs):
+
+  MacroAUC0.1 = (1/N) Σ_k AUC0.1_k
+  MacroAUCPR  = (1/N) Σ_k AUCPR_k
+  N = 4 on val, 4 on test
+
+GigaEvo keys:
+
+  fitness      Macro-AUC0.1     primary, higher is better
+  mean_aucpr   Macro-AUCPR
+  min_auc01    min_k AUC0.1_k
+  min_aucpr    min_k AUCPR_k
+  n_scored     number of pairs scored
+  n_pmhc       4 if every pMHC has both scores finite
+  is_valid     1 iff all 4 AUCPR and AUC0.1 values are finite
+
+Pooled AUCPR / AUC0.1 over all pairs of the fold is not used.
+
+Artifact stores the per-pMHC table: n, n_pos, aucpr, auc0.1.
+
+
+6. Invalid run
+--------------
+is_valid=0 and fitness=-1 when any of these hold:
+
+  entrypoint() is None or has no fit/score
+  fit() or score() raises
+  score length != number of eval rows
+  any score is NaN or Inf
+  any pMHC in the scored fold has <2 classes or <2 rows
+  any per-pMHC AUCPR or AUC0.1 is non-finite
+
+mean_aucpr, min_auc01, min_aucpr, n_scored, n_pmhc are then 0.
+
+
+7. What the model is allowed to see
+-----------------------------------
+fit(train)
+  labels of the 12 train pMHCs
+  sequences / PDB / MaSIF of train pairs
+  TCR identities that appear in train
+    (those TCRs also appear in val/test with other pMHCs)
+
+score(val) or score(test)
+  features of those pairs, including TCR identity and sequences
+  not the label column
+  not the other held-out fold
+
+Not allowed
+  fitting on val or test
+  using val labels to pick hyperparameters that are then reported
+    as validate() fitness  (that would be val-tuning inside fitness)
+  using test in any way before test.py
+
+
+8. What this protocol measures
+------------------------------
+Generalization to unseen pMHC (new peptide + the same two MHC alleles).
+
+It does not measure generalization to unseen TCR.
+A model that memorizes train TCR ids can still score those TCRs on
+a new pMHC. That is accepted for r0.
+
+Random ranking on a ~10% positive pMHC has McClish AUC0.1 = 0.5
+and AUCPR ≈ prevalence ≈ 0.10.
+Positive rate is similar in train/val/test (~10%), so class prior
+does not shift across folds.
+
+
+9. How to run
+-------------
+Evolution fitness (val):
+  GigaEvo problem=pmhctcr  →  validate() on each child
+
+Held-out test, after selection:
+  python problems/pmhctcr/test.py path/to/program.py
+
+Smoke baseline (sequence logistic on epitope + CDR3 composition):
+  problems/pmhctcr/initial_programs/cdr3_logistic.py
+
+--------------
+Per pMHC
+
+AUCPR — average_precision_score
+AUC0.1 — roc_auc_score(..., max_fpr=0.1) with McClish (ImmRep25 / Kaggle)
+Across the 4 val (or test) pMHCs, unweighted mean, not pooled:
+
+fitness = Macro-AUC0.1
+mean_aucpr = Macro-AUCPR
+Random ranking: AUC0.1 = 0.5, AUCPR ≈ 0.10.

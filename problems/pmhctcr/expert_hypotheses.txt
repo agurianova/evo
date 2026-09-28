@@ -1,0 +1,45 @@
+Expert hypotheses for pMHC–TCR evolution. Use, modify, combine, or reject them based on the current parent program and accumulated evidence. Do not implement an expert idea solely because it was provided.
+
+MAP-Elites `interaction_family` labels (final): `global_concat`, `explicit_patch_matching`, `bilinear_product`, `single_cross_attention`, `reciprocal_dual_attention`, `multi_branch_gated`.
+
+### 1. Distributed surface complementarity
+
+Cognate recognition may arise from multiple weak but spatially coherent surface matches. Use MaSIF patch distance, matched area, connected components, trace length, and reciprocal matching. Compare fixed, soft, and learned matching thresholds.
+
+Implementation hints:
+- Load full surfaces with `np.load(masif_tcr_path)` / `np.load(masif_pmhc_path)`; use `desc_straight` (TCR) and `desc_flipped` (pMHC) with `xyz`.
+- Fixed threshold: L2 descriptor distance < 1.7 (default). Soft: temperature-scaled weights over all pairs. Learned: scalar or per-point threshold in the model.
+- Helpers: `problems.pmhctcr.spots.core_spot_features`, `problems.pmhctcr.spots.masif_complementarity_stats` (trace_length, reciprocal_match_frac, max_component_size).
+- Merge matched points on xyz into connected components; summarize area_frac, n_components, trace span of the largest component.
+- Reciprocal matching: TCR point i matches pMHC j only if j's nearest TCR is i (mutual NN under the threshold).
+
+### 2. Transferable V-region features
+
+TRAV/TRBV usage differs between cognate and non-cognate TCRs but generalizes poorly across pMHCs. Replace gene identities with sequence-, ESM-2-, structure-, and surface-derived representations of CDR1, CDR2, and framework regions. Evaluate on held-out pMHCs.
+
+Implementation hints:
+- Do NOT use TRAV/TRBV/TRAJ/TRBJ names as features (no one-hot / hash / embedding).
+- Sequence: `regions.split_chain(seq, cdr3, vgene)` → fr1/cdr1/fr2/cdr2/fr3/cdr3/fr4 text; AA composition or length per region.
+- ESM-2: `load_esm(esm_tcra_path)` / `load_esm(esm_tcrb_path)`; pool `residue[region_indices(seq, "cdr1", cdr3=..., vgene=...)]`.
+- Structure: `load_pdb(pdb_path)` → Cα xyz/aa/chain/plddt for V-region residues (chains A/B).
+- Surface: map MaSIF xyz → nearest PDB Cα; pool complementary-patch stats by loop bin (CDR1/2/FR vs CDR3 vs peptide/MHC).
+
+### 3. Meta stable states
+
+A TCR–pMHC pair may support multiple contact configurations. Model K latent interface states using separate attention or patch-matching modules. Aggregate state scores by max pooling, log-sum-exp, or learned gating. Add a diversity constraint to prevent state collapse.
+
+Implementation hints:
+- K parallel heads: separate MaSIF patch cross-attn, PDB residue cross-attn, or patch-matching modules (K=2–8).
+- Aggregate per-state scores: `max`, `logsumexp`, or softmax-gated mixture.
+- Diversity: entropy penalty on state usage, orthogonal state embeddings, or repulsion between state attention maps.
+- Keep compact (subsample patches/residues) for validator timeout.
+
+### 4. Structure confidence as a compatibility signal
+
+Structure-prediction confidence can distinguish compatible from incompatible TCR–pMHC pairs. Test whether Boltz-2 residue-level pLDDT, stored in the PDB B-factor field, provides a similar signal. Use regional pLDDT statistics as explicit features and as weights or masks for structural tokens, pooling, cross-attention, and interface aggregation.
+
+Implementation hints:
+- `load_pdb(pdb_path)` returns `plddt` (per Cα, 0–100) alongside xyz/aa/chain.
+- Regional stats: mean/min pLDDT over CDR1/2/3, FR, peptide-proximal TCR residues, interface residues (<8 Å to peptide).
+- Use pLDDT as feature (not binding energy) and as weights: down-weight low-confidence tokens in pooling / cross-attention / interface aggregation.
+- pLDDT is local fold confidence, not inter-chain PAE; do not treat it as pairwise geometry confidence.

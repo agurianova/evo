@@ -1,0 +1,4 @@
+TASK — TABULAR REGRESSION (regression-num-medium-0-elevators)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-15]     numeric

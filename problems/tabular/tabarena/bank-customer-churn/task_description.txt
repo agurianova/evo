@@ -1,0 +1,13 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-bank-customer-churn)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] credit_score numeric
+- [1] age         numeric
+- [2] tenure      numeric
+- [3] balance     numeric
+- [4] products_number numeric
+- [5] estimated_salary numeric
+- [6] country     categorical (integer code), 3 levels: 0=France 1=Germany 2=Spain
+- [7] gender      categorical (integer code), 2 levels: 0=Female 1=Male
+- [8] credit_card categorical (integer code), 2 levels: 0=0 1=1
+- [9] active_member categorical (integer code), 2 levels: 0=0 1=1

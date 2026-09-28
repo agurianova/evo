@@ -1,0 +1,4 @@
+Label: C1_D
+DB: 6
+Gen: 16
+Best fitness: 0.27218

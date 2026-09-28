@@ -1,0 +1,24 @@
+# @package _global_
+# Evolution engine constants
+
+loop_interval: 1.0
+sync_min_delta: 8
+num_parents: 2
+mutation_mode: rewrite
+max_mutants: 250
+strip_comments_and_docstrings: false
+pre_step_hook: null
+post_step_hook: null
+# Wall-clock bound (seconds) on a single post_step_hook invocation. 300s suits
+# the CPU-bound production CompositionInjectionHook; the network-bound
+# LiveMemoryRefreshHook (LLM enrichment) raises it via the memory recipe.
+# Override per run: post_step_hook_timeout_s=<seconds>.
+post_step_hook_timeout_s: 300.0
+max_in_flight: 8
+max_consecutive_mutation_failures: 32
+# Bounded drain budget (seconds) after the mutant cap is reached: drain in-flight
+# evals up to this budget so fast ones still land, then abandon stragglers for
+# teardown to SIGKILL and finalize the run cleanly. null restores the legacy
+# drain-up-to-dag_timeout-then-raise contract. Override per run:
+# post_cap_drain_grace_s=<seconds|null>.
+post_cap_drain_grace_s: 30.0

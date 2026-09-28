@@ -1,0 +1,4 @@
+TASK — TABULAR BINARY CLASSIFICATION (classif-num-medium-0-bank-marketing)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-6]      numeric

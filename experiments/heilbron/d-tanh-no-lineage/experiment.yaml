@@ -1,0 +1,438 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/d-tanh-no-lineage
+    task: heilbron
+    branch: exp/heilbron/d-tanh-no-lineage
+    pr_number: 223
+    tracking_issue: null
+    prereg_commit: 7b7c5f5e
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    task_group: heilbron
+    pipeline: heilbron_smooth_v1
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 900
+    dag_timeout: 3600
+    mutation_mode: rewrite
+    shared_overrides:
+      evolution: steady_state
+      stopper: max_generations
+      inner_iterations: 1
+      n_opponents: 1
+      source_prompt_k: 1
+    pinned:
+      pre_step_hook.drift_cap: 100000
+      pre_step_hook.sync_every_n_epochs: 1
+      inner_iterations: 1
+      n_opponents: 1
+      source_prompt_k: 1
+      num_parents: 1
+      max_elites_per_generation: 8
+      max_mutations_per_generation: 8
+      mutation_mode: rewrite
+      max_generations: 200
+      pipeline_builder.lineage_filter.min_shared: 1
+      pipeline_builder.lineage_filter.inject_shared_evidence: true
+  runs:
+  - label: A1_G
+    db: 1
+    prefix: heilbron_smooth_v1/pop_a
+    pipeline: heilbron_smooth_v1
+    problem_name: heilbron_smooth_v1/pop_a
+    condition: 'Arm A (Composition): Constructor, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3998971
+    log_path: run_A1_G.log
+    extra_overrides:
+    - aggregator=heilbron_constructor
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_smooth_v1/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - post_step_hook=\${composition_injection_hook}
+    - opponent_result_mode=exec
+    - opponent_sampling_mode=softmax
+    - pipeline_builder.archive_reeval=false
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+    pinned:
+      pipeline_builder.disable_lineage_on_improver: false
+  - label: A1_D
+    db: 2
+    prefix: heilbron_smooth_v1/pop_b
+    pipeline: heilbron_smooth_v1
+    problem_name: heilbron_smooth_v1/pop_b
+    condition: 'Arm A (Composition): Improver, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3998972
+    log_path: run_A1_D.log
+    extra_overrides:
+    - aggregator=heilbron_improver
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_smooth_v1/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - opponent_result_mode=cached
+    - opponent_sampling_mode=top_k
+    - pipeline_builder.archive_reeval=true
+    - engine_config.refresh_order=generation_bucketed
+    - engine_config.refresh_passes=1
+    - pipeline_builder.disable_lineage_on_improver=true
+    role: improver
+    pinned:
+      pipeline_builder.disable_lineage_on_improver: true
+      engine_config.refresh_passes: 1
+  - label: C1_G
+    db: 5
+    prefix: heilbron_smooth_v1/pop_a
+    pipeline: heilbron_smooth_v1
+    problem_name: heilbron_smooth_v1/pop_a
+    condition: 'Arm C (Gradient-in-prompt): Constructor, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3998973
+    log_path: run_C1_G.log
+    extra_overrides:
+    - aggregator=heilbron_constructor
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_smooth_v1/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    - opponent_result_mode=exec
+    - opponent_sampling_mode=softmax
+    - pipeline_builder.archive_reeval=false
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+    pinned:
+      pipeline_builder.disable_lineage_on_improver: false
+  - label: C1_D
+    db: 6
+    prefix: heilbron_smooth_v1/pop_b
+    pipeline: heilbron_smooth_v1
+    problem_name: heilbron_smooth_v1/pop_b
+    condition: 'Arm C (Gradient-in-prompt): Improver, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 3998974
+    log_path: run_C1_D.log
+    extra_overrides:
+    - aggregator=heilbron_improver
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_smooth_v1/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - opponent_result_mode=cached
+    - opponent_sampling_mode=top_k
+    - pipeline_builder.archive_reeval=true
+    - engine_config.refresh_order=generation_bucketed
+    - engine_config.refresh_passes=1
+    - pipeline_builder.disable_lineage_on_improver=true
+    role: improver
+    pinned:
+      pipeline_builder.disable_lineage_on_improver: true
+      engine_config.refresh_passes: 1
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+    HTTPS_PROXY: ''
+    HTTP_PROXY: ''
+    https_proxy: ''
+    http_proxy: ''
+  max_generations: 200
+  baseline:
+    reference: heilbron/adversarial-repro-v2
+    mean: 0.03315
+    metric: actual_fitness (best-ever, 4 G runs, v2 NULL)
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-27T19:06:03.550383+00:00'
+    commit: 823170ef7dc0247fc0d68352dc3d97f88aec5399
+    confirmed_at: '2026-04-27T19:06:03.550383+00:00'
+  smoke_test:
+    completed: true
+    db: null
+    generations: 3
+    log_path: smoke/smoke_D.log
+    completed_at: '2026-04-27T15:11:23Z'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-27T15:00:05Z'
+    note: null
+    alignment_check_completed: true
+    alignment_check_at: '2026-04-25T12:41:07Z'
+    alignment_check_completed_at: '2026-04-27T15:00:20Z'
+treatment_checks:
+- name: redis_frontier_fitness_history_present
+  type: redis_key_pattern
+  pattern: '{prefix}:metrics:history:program_metrics:valid_frontier_fitness'
+  severity: MAJOR
+  rationale: Frontier fitness history must accumulate as the run progresses.
+- name: log_drift_cap_init
+  type: log_pattern_present
+  pattern: \[ProgressBasedSyncHook\] Init.*drift_cap=100000
+  severity: MAJOR
+- name: log_pipeline_heilbron_smooth_v1
+  type: log_pattern_present
+  pattern: pipeline.*heilbron_smooth_v1
+  severity: MAJOR
+- name: log_asymmetric_role_emitted
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\].*role=(constructor|improver)
+  severity: MAJOR
+- name: log_asymmetric_feedback_mode_emitted
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\].*feedback=(composition|gradient_in_prompt)
+  severity: MAJOR
+- name: log_opponents_db_id_visible
+  type: log_pattern_present
+  pattern: opponents=\[db=[1-8]
+  severity: MAJOR
+- name: log_opponent_result_mode_emitted
+  type: log_pattern_present
+  pattern: \[AdversarialPipeline\] opponent_result_mode=(exec|cached)
+  severity: MAJOR
+- name: log_opponent_provider_active
+  type: log_pattern_present
+  pattern: \[ExecOpponentResultProvider\] produced \d+/\d+|\[CachedOpponentResultProvider\] hit=\d+
+  severity: MAJOR
+- name: log_opponent_sampling_mode_emitted
+  type: log_pattern_present
+  pattern: opponent_sampling_mode=(softmax|top_k)
+  severity: MAJOR
+- name: log_bucketed_refresh_present
+  type: log_pattern_present
+  pattern: Bucketed refresh
+  severity: MAJOR
+- name: log_drift_cap_not_exceeded
+  type: log_pattern_absent
+  pattern: drift_cap exceeded
+  severity: MAJOR
+- name: log_population_role_not_defaulted
+  type: log_pattern_absent
+  pattern: defaulting to .* population_role
+  severity: MAJOR
+- name: log_feedback_mode_set
+  type: log_pattern_absent
+  pattern: feedback_mode not set
+  severity: MAJOR
+- name: log_bucketed_mget_no_fallback
+  type: log_pattern_absent
+  pattern: bucketed mget failed.*falling back to fifo
+  severity: MAJOR
+- name: log_no_lineage_aggregator_error
+  type: log_pattern_absent
+  pattern: lineage_filter.aggregator required
+  severity: CRITICAL
+  rationale: 'Volkov M2 ordering invariant. With disable_lineage_on_improver=true, _resolve_lineage_filter must NEVER be invoked. If this error appears, the gate misordered and ValueError was raised at pipeline build.
+
+    '
+- name: A1_D_disable_lineage_activation
+  run_ref: A1_D
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\] disable_lineage_on_improver=true
+  severity: CRITICAL
+  rationale: 'Activation log emitted at the same point as the three remove_stage() calls. Presence proves the gate fired AND ordering invariant held.
+
+    '
+- name: A2_D_disable_lineage_activation
+  run_ref: A2_D
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\] disable_lineage_on_improver=true
+  severity: CRITICAL
+- name: C1_D_disable_lineage_activation
+  run_ref: C1_D
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\] disable_lineage_on_improver=true
+  severity: CRITICAL
+- name: C2_D_disable_lineage_activation
+  run_ref: C2_D
+  type: log_pattern_present
+  pattern: \[AsymmetricPipeline\] disable_lineage_on_improver=true
+  severity: CRITICAL
+- name: A1_D_no_lineagestage_compute
+  run_ref: A1_D
+  type: log_pattern_absent
+  pattern: \[LineageStage\] program=|\[LineageStage:SharedBenchmark\]
+  severity: CRITICAL
+  rationale: With all three lineage stages removed, no LineageStage compute() may fire on D.
+- name: A2_D_no_lineagestage_compute
+  run_ref: A2_D
+  type: log_pattern_absent
+  pattern: \[LineageStage\] program=|\[LineageStage:SharedBenchmark\]
+  severity: CRITICAL
+- name: C1_D_no_lineagestage_compute
+  run_ref: C1_D
+  type: log_pattern_absent
+  pattern: \[LineageStage\] program=|\[LineageStage:SharedBenchmark\]
+  severity: CRITICAL
+- name: C2_D_no_lineagestage_compute
+  run_ref: C2_D
+  type: log_pattern_absent
+  pattern: \[LineageStage\] program=|\[LineageStage:SharedBenchmark\]
+  severity: CRITICAL
+- name: A1_G_lineagestage_active
+  run_ref: A1_G
+  type: log_pattern_present
+  pattern: \[LineageStage\] program=
+  severity: CRITICAL
+  rationale: G keeps LineageStage; absence would invalidate the asymmetry control.
+- name: A2_G_lineagestage_active
+  run_ref: A2_G
+  type: log_pattern_present
+  pattern: \[LineageStage\] program=
+  severity: CRITICAL
+- name: C1_G_lineagestage_active
+  run_ref: C1_G
+  type: log_pattern_present
+  pattern: \[LineageStage\] program=
+  severity: CRITICAL
+- name: C2_G_lineagestage_active
+  run_ref: C2_G
+  type: log_pattern_present
+  pattern: \[LineageStage\] program=
+  severity: CRITICAL
+control_plane:
+  watchdog:
+    plugin: adversarial
+    sentinel_value: -1.0
+    plot_metrics:
+    - actual_fitness
+    plot_commands:
+    - command: arms-race
+      args:
+        metric: actual_fitness
+        paired: A1_G:A1_D,A2_G:A2_D,C1_G:C1_D,C2_G:C2_D
+      output_name: arms_race.png
+      caption: Arms-race dynamics (G vs D per pair)
+    - command: comparison
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        annotate-frontier: true
+        no-frontier-for: A1_D,A2_D,C1_D,C2_D
+        max-annotations: 3
+      output_name: evolution_runs_comparison.png
+      caption: G runs vs v2 baseline (0.03315); D runs excluded from frontier
+    alert_thresholds:
+      invalidity_rate: 0.75
+      stagnation_window: 10
+      generation_gap_threshold: 5
+      excluded_events:
+      - HOF_FETCH
+      - HOF_ROTATE
+      - CELL_PICK
+      - TRACKER_WRITE
+    poll_interval_s: 3600
+    plot_retries: 3
+    plot_retry_delay_s: 30
+    rolling_comment_threshold_hours: 24
+    checkpoint_milestones:
+    - 0.1
+    - 0.2
+    - 0.5
+    - 1.0
+    no_proxy_hosts: []
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 3999615
+  anomaly_detector_cron_id: d73d9ba1
+  checkpoint_cron_id: 09c0b609
+checkpoints:
+- gen: 9
+  timestamp: '2026-04-27T21:34:55.893964+00:00'
+  metric_name: actual_fitness
+  run_metrics:
+  - label: A1_G
+    gen: 8
+    best_actual_fitness: 0.02859
+    recent_invalidity: 0.0
+  - label: A1_D
+    gen: 12
+    best_actual_fitness: 0.02886
+    recent_invalidity: 0.0
+  - label: C1_G
+    gen: 9
+    best_actual_fitness: 0.02883
+    recent_invalidity: 0.0
+  - label: C1_D
+    gen: 7
+    best_actual_fitness: 0.02931
+    recent_invalidity: 0.0
+  notes: 'First checkpoint after relaunch (4-run, N=1). Stages cooled from earlier near-timeout window (max 885s) to ~300s; 0 stage failures across all 4 runs. Treatment IV verified: 3 lineage stages absent on both D runs (A1_D, C1_D) and present on both G runs. A arm shows v1 D-ahead-of-G compute pattern (A1_D=12 vs A1_G=8); C arm closer (C1_D=7, C1_G=9).'
+- gen: 24
+  timestamp: '2026-04-28T01:32:35.886226+00:00'
+  metric_name: actual_fitness
+  run_metrics:
+  - label: A1_G
+    gen: 17
+    best_actual_fitness: 0.02998
+    recent_invalidity: 0.0
+  - label: A1_D
+    gen: 32
+    best_actual_fitness: 0.03124
+    recent_invalidity: 0.0
+  - label: C1_G
+    gen: 21
+    best_actual_fitness: 0.02899
+    recent_invalidity: 0.0
+  - label: C1_D
+    gen: 26
+    best_actual_fitness: 0.03066
+    recent_invalidity: 0.0
+  notes: 'Checkpoint #2 at gen ~22 (~11% of 200-gen budget). All 4 PIDs alive. A1_G crossed 0.02998 (90.4% of v2 NULL band 0.03315) — best G result so far, climbed from 0.02859 (+4.9%) since checkpoint #1. A1_D leads at 0.03124 (94.2% of v2 NULL). 0 stage failures across all 4 runs. WATCHFUL: stage durations climbed back into 600-790s range (88% of 900s timeout on A1_G/A1_D Insights) but isolated spikes — last values all <110s. Treatment IV verified active (3 lineage stages absent on A1_D, C1_D). D-ahead-of-G compute pattern strong in both arms (A1_D=31 vs A1_G=15 = 2.07×; C1_D=25 vs C1_G=19 = 1.32×).'
+- gen: 38
+  timestamp: '2026-04-28T05:31:34.615944+00:00'
+  metric_name: actual_fitness
+  run_metrics:
+  - label: A1_G
+    gen: 29
+    best_actual_fitness: 0.03124
+    recent_invalidity: 0.0
+  - label: A1_D
+    gen: 52
+    best_actual_fitness: 0.03074
+    recent_invalidity: 0.0
+  - label: C1_G
+    gen: 34
+    best_actual_fitness: 0.03243
+    recent_invalidity: 0.0
+  - label: C1_D
+    gen: 37
+    best_actual_fitness: 0.03243
+    recent_invalidity: 0.0
+  notes: C1_G at 0.03243 = 97.8% of v2 NULL band (0.03315) — closest the hypothesis target metric has come. A1_G also climbing (0.03124 = 94.2%). Sustained (not isolated) 600-753s stage durations on A1_G L/I, A1_D I, and C1_D I — different pattern from CP#2 spikes (last==max). 0 stage failures; 4-run mitigation holding. Treatment IV intact (3 lineage stages absent on D).
+archives:
+  release_url: https://github.com/KhrulkovV/gigaevo-core-internal/releases/tag/exp/heilbron/d-tanh-no-lineage

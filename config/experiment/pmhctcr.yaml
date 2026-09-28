@@ -1,0 +1,36 @@
+# @package _global_
+
+defaults:
+  - /experiment/base
+  - override /pipeline: guided
+  - override /memory: none
+  - override /program_format: python_source
+  - override /loader: directory
+  - override /mutation: pmhctcr
+  - override /algorithm: pmhctcr_2d
+  - _self_
+
+problem:
+  name: pmhctcr
+
+# One insight → one JSON operator. MutationSuggestionStage interpolates this.
+max_insights: 1
+# json_document.yaml also sets this, but /prompts: default (dir: null) wins
+# in Hydra composition unless the experiment restates it after _self_.
+prompts:
+  dir: ${problem.dir}/prompts
+# Only the generated JSON→Python seed. cdr3_logistic.py is a baseline, not a genome.
+loader:
+  pattern: seed.py
+max_in_flight: 1
+llm_max_concurrent: 1
+max_tokens: 8192
+
+# LLM / simple DAG stages keep ``stage_timeout`` (launcher: 240).
+# PDB GAT fit is CallValidatorFunction; never shrink below stage_timeout
+# (so the global 3600 default stays 3600).
+validator_timeout: 900
+
+pipeline_builder:
+  _target_: problems.pmhctcr.pipeline.PmhctcrGuidedPipelineBuilder
+  validator_timeout: ${validator_timeout}

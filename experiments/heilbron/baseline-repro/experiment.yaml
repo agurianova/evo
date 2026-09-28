@@ -1,0 +1,416 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/baseline-repro
+    task: heilbron
+    branch: exp/heilbron/baseline-repro
+    prereg_commit: 08837375
+    pr_number: 201
+    tracking_issue: 202
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: fitness
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.01
+  runs:
+  - label: P1_A
+    db: 1
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Pair 1: Constructor (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727166
+    log_path: pop_a_pair1.log
+    extra_overrides:
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P1_B
+    db: 2
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Pair 1: Improver (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727167
+    log_path: pop_b_pair1.log
+    extra_overrides:
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P2_A
+    db: 3
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Pair 2: Constructor (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727168
+    log_path: pop_a_pair2.log
+    extra_overrides:
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P2_B
+    db: 4
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Pair 2: Improver (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727169
+    log_path: pop_b_pair2.log
+    extra_overrides:
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P3_A
+    db: 5
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Pair 3: Constructor (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727170
+    log_path: pop_a_pair3.log
+    extra_overrides:
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P3_B
+    db: 6
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Pair 3: Improver (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727171
+    log_path: pop_b_pair3.log
+    extra_overrides:
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P4_A
+    db: 7
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Pair 4: Constructor (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727172
+    log_path: pop_a_pair4.log
+    extra_overrides:
+    - opponent_redis_db=8
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - pipeline_builder.per_opponent_timeout=300
+  - label: P4_B
+    db: 8
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_coevo
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Pair 4: Improver (replication)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 1727173
+    log_path: pop_b_pair4.log
+    extra_overrides:
+    - opponent_redis_db=7
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - pipeline_builder.per_opponent_timeout=300
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 50
+  stopping_rule:
+    description: max_generations=50
+    conditions: []
+    enforce_at: checkpoint
+  baseline:
+    reference: adversarial/heilbron-prover
+    mean: 0.03464
+    metric: actual_fitness
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-10T11:24:54.424111+00:00'
+    commit: 321dea2abd2830998826b64632834d8f42a24962
+    confirmed_at: '2026-04-10T11:24:54.430193+00:00'
+  smoke_test:
+    completed: true
+    db: 1
+    generations: 3
+    log_path: smoke.log
+    completed_at: '2026-04-10T11:09:28.520727+00:00'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-10T10:50:05.843021+00:00'
+    alignment_check_completed: true
+    alignment_check_at: '2026-04-10T10:50:05.843037+00:00'
+telemetry:
+  checkpoints:
+  - gen: 12
+    timestamp: '2026-04-10T14:19:01.583725+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 13
+      best_fitness: 0.7860384956365489
+      actual_fitness: 0.028180810181468063
+    - label: P1_B
+      gen: 13
+      best_fitness: 0.20753639661041187
+      actual_fitness: 0.03242701231649647
+    - label: P2_A
+      gen: 7
+      best_fitness: 0.9433102589007885
+      actual_fitness: 0.03236164889975755
+    - label: P2_B
+      gen: 7
+      best_fitness: 0.3019188072144427
+      actual_fitness: 0.026389776934713116
+    - label: P3_A
+      gen: 13
+      best_fitness: 0.9151023944366974
+      actual_fitness: 0.030302474793878903
+    - label: P3_B
+      gen: 12
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03030268047715671
+    - label: P4_A
+      gen: 16
+      best_fitness: 0.8727515681050538
+      actual_fitness: 0.02749214687717097
+    - label: P4_B
+      gen: 15
+      best_fitness: 0.1431607345172797
+      actual_fitness: 0.030467857175121876
+    notes: 'Gen ~7-15/50. All PIDs alive, 0% invalidity. Diagnose: HEALTHY. Pair 2 slower due to computationally expensive evolved programs (up to 2928s execution time).'
+  - gen: 20
+    timestamp: '2026-04-10T18:10:08.648619+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 20
+      best_fitness: 0.9005274139521403
+      actual_fitness: 0.030607954527195586
+    - label: P1_B
+      gen: 20
+      best_fitness: 0.20753639661041187
+      actual_fitness: 0.03487194975190664
+    - label: P2_A
+      gen: 12
+      best_fitness: 0.9433102589007885
+      actual_fitness: 0.03236164889975755
+    - label: P2_B
+      gen: 12
+      best_fitness: 0.15749160757304262
+      actual_fitness: 0.026312007427342632
+    - label: P3_A
+      gen: 27
+      best_fitness: 0.9136843558669128
+      actual_fitness: 0.03177827592721175
+    - label: P3_B
+      gen: 27
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03199172235734318
+    - label: P4_A
+      gen: 24
+      best_fitness: 0.8572041777183035
+      actual_fitness: 0.02966990671277575
+    - label: P4_B
+      gen: 24
+      best_fitness: 0.1388329133728571
+      actual_fitness: 0.031633897600660654
+    notes: Gen ~20/50 (40%). P3_A leading at gen 27. All PIDs alive. Actual fitness 0.027-0.031, below baseline 0.034 but expected at this stage. Diagnose pending.
+  - gen: 21
+    timestamp: '2026-04-10T18:24:33.318204+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 21
+      best_fitness: 0.9005274139521403
+      actual_fitness: 0.031251319879897224
+    - label: P1_B
+      gen: 20
+      best_fitness: 0.20753639661041187
+      actual_fitness: 0.03487194975190664
+    - label: P2_A
+      gen: 12
+      best_fitness: 0.9433102589007885
+      actual_fitness: 0.03236164889975755
+    - label: P2_B
+      gen: 12
+      best_fitness: 0.15749160757304262
+      actual_fitness: 0.026312007427342632
+    - label: P3_A
+      gen: 28
+      best_fitness: 0.9163984549082487
+      actual_fitness: 0.03177827592721175
+    - label: P3_B
+      gen: 27
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03199172235734318
+    - label: P4_A
+      gen: 25
+      best_fitness: 0.8572041777183035
+      actual_fitness: 0.02966990671277575
+    - label: P4_B
+      gen: 24
+      best_fitness: 0.1388329133728571
+      actual_fitness: 0.031633897600660654
+    notes: 'gen ~25/50 (50-56%). Mean Constructor actual_fitness=0.03111 (REVISED band). All PIDs alive. mid-run checkpoint-analyst completed. Rising actual_fitness trend: Constructors trading raw quality for 100% resistance (expected). R3 stagnant (gen 12). No action needed. Analyst: CONFIRMED unlikely without trend reversal.'
+  - gen: 28
+    timestamp: '2026-04-10T22:09:26.542703+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 25
+      best_fitness: 0.9105201322493734
+      actual_fitness: 0.031251319879897224
+    - label: P1_B
+      gen: 26
+      best_fitness: 0.20753639661041187
+      actual_fitness: 0.034852848523776556
+    - label: P2_A
+      gen: 16
+      best_fitness: 0.9430769660770233
+      actual_fitness: 0.03236164889975755
+    - label: P2_B
+      gen: 16
+      best_fitness: 0.29186831270941266
+      actual_fitness: 0.02934567380074793
+    - label: P3_A
+      gen: 42
+      best_fitness: 0.9510677789492897
+      actual_fitness: 0.03350175581484604
+    - label: P3_B
+      gen: 43
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03350175581484604
+    - label: P4_A
+      gen: 31
+      best_fitness: 0.8727515681050538
+      actual_fitness: 0.02966990671277575
+    - label: P4_B
+      gen: 30
+      best_fitness: 0.1377262723796843
+      actual_fitness: 0.031633897600660654
+    notes: gen ~29/50. P3_A at 84% (gen 42), actual_fitness=0.03350 — above CONFIRMED threshold 0.033. All PIDs alive. No action needed. Diagnose HEALTHY (CRITICAL=false positive). P2_A still lagging (gen 16, computationally expensive programs). P3 pair likely first to complete gen 50.
+  - gen: 38
+    timestamp: '2026-04-11T06:15:45.818872+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 38
+      best_fitness: 0.9126511753166644
+      actual_fitness: 0.03222954394009364
+    - label: P1_B
+      gen: 37
+      best_fitness: 0.27273008231772405
+      actual_fitness: 0.034852848523776556
+    - label: P2_A
+      gen: 24
+      best_fitness: 0.9430769660770233
+      actual_fitness: 0.0327559559067023
+    - label: P2_B
+      gen: 25
+      best_fitness: 0.2771609245806579
+      actual_fitness: 0.03361000781835638
+    - label: P3_A
+      gen: 50
+      best_fitness: 0.9648500209823574
+      actual_fitness: 0.0365
+    - label: P3_B
+      gen: 50
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03453973222084313
+    - label: P4_A
+      gen: 44
+      best_fitness: 0.9141334511280556
+      actual_fitness: 0.030231741932348052
+    - label: P4_B
+      gen: 43
+      best_fitness: 0.25389962968014795
+      actual_fitness: 0.03254908552444705
+    notes: gen ~38/50 (76%). P3 pair COMPLETE (gen 50). P3_A actual_fitness=0.03650 (CONFIRMED HIGH, above Q_MAX=0.0365). P4 at 88%, P1 at 76%, P2 at 48-50% (slow due to expensive programs). Mean Constructor actual_fitness=0.03293 (REVISED band). All PIDs alive. Diagnose HEALTHY (CRITICAL=false positive). No deviations.
+  - gen: 42
+    timestamp: '2026-04-11T10:08:35.784962+00:00'
+    run_metrics:
+    - label: P1_A
+      gen: 42
+      best_fitness: 0.8912327567315018
+      actual_fitness: 0.034002245911466555
+    - label: P1_B
+      gen: 42
+      best_fitness: 0.3595414276913087
+      actual_fitness: 0.03614053601526035
+    - label: P2_A
+      gen: 28
+      best_fitness: 0.9430769660770233
+      actual_fitness: 0.0327559559067023
+    - label: P2_B
+      gen: 28
+      best_fitness: 0.32547902150958796
+      actual_fitness: 0.0327559559067023
+    - label: P3_A
+      gen: 50
+      best_fitness: 0.9648500209823574
+      actual_fitness: 0.0365
+    - label: P3_B
+      gen: 50
+      best_fitness: 0.2019018796346374
+      actual_fitness: 0.03453973222084313
+    - label: P4_A
+      gen: 48
+      best_fitness: 0.9141334511280556
+      actual_fitness: 0.030231741932348052
+    - label: P4_B
+      gen: 48
+      best_fitness: 0.5262761271480392
+      actual_fitness: 0.03194664657804456
+    notes: gen ~42/50 (84%). P3 COMPLETE. P4 at 48/50 (96%, nearly done). P1 at 84%, P2 at 56% (slow). Mean Constructor actual_fitness=0.03337 (REVISED band, rising). P4_A actual_fitness=0.03023 still lagging. All PIDs alive. Diagnose HEALTHY. No deviations.
+  mid_run_test_eval: {}
+  checkpoint_analysis:
+    mid_run:
+      completed: true
+      completed_at: '2026-04-10T18:23:45.245212+00:00'
+      notes: 'gen~25 (R5=56%, R7=50%). Mean actual_fitness=0.03111 (REVISED band 0.030-0.033). Rising actual_fitness trend R1/R5/R7 from gen~12 is hypothesis-relevant: Constructor optimizes composite fitness (quality+resistance), trading raw min_area for 100% resistance. R3 stagnant at gen 12. No action needed. Projected outcome: REVISED most likely; CONFIRMED possible but requires trend reversal.'
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 1953059
+  anomaly_detector_cron_id: f0a7f53d
+  checkpoint_cron_id: f651f163

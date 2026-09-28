@@ -1,0 +1,28 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-marketing-campaign)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Year_Birth  numeric
+- [1] Income      numeric
+- [2] Kidhome     numeric
+- [3] Teenhome    numeric
+- [4] Recency     numeric
+- [5] MntWines    numeric
+- [6] MntFruits   numeric
+- [7] MntMeatProducts numeric
+- [8] MntFishProducts numeric
+- [9] MntSweetProducts numeric
+- [10] MntGoldProds numeric
+- [11] NumDealsPurchases numeric
+- [12] NumWebPurchases numeric
+- [13] NumCatalogPurchases numeric
+- [14] NumStorePurchases numeric
+- [15] NumWebVisitsMonth numeric
+- [16] Education   categorical (integer code), 5 levels: 0=2n Cycle 1=Basic 2=Graduation 3=Master 4=PhD
+- [17] Marital_Status categorical (integer code), 6 levels: 0=Alone 1=Divorced 2=Married 3=Single 4=Together 5=Widow
+- [18] Dt_Customer categorical (integer code), 444 levels: 0=2012-07-30 1=2012-08-01 2=2012-08-03 3=2012-08-04 4=2012-08-07 5=2012-08-08 ... 443=2014-06-27
+- [19] AcceptedCmp3 categorical (integer code), 2 levels: 0=0 1=1
+- [20] AcceptedCmp4 categorical (integer code), 2 levels: 0=0 1=1
+- [21] AcceptedCmp5 categorical (integer code), 2 levels: 0=0 1=1
+- [22] AcceptedCmp1 categorical (integer code), 2 levels: 0=0 1=1
+- [23] AcceptedCmp2 categorical (integer code), 2 levels: 0=0 1=1
+- [24] Complain    categorical (integer code), 2 levels: 0=0 1=1

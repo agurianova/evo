@@ -1,0 +1,17 @@
+# @package _global_
+# Full Python source is the genome. One selected parent defines lineage;
+# additional DONE programs are sampled independently as LLM inspirations.
+# Insights must prescribe Python edits (not JSON CHANGE_* operators).
+
+loader:
+  pattern: python_patch_seed.py
+
+prompts:
+  dir: ${problem.dir}/prompts_python_patch
+
+mutation_operator:
+  _target_: gigaevo.evolution.mutation.python_patch.PythonPatchMutationOperator
+  llm_wrapper: ${ref:llm}
+  program_storage: ${ref:program_storage}
+  num_inspirations: 3
+  entry_function: entrypoint

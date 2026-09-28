@@ -1,0 +1,566 @@
+schema_version: 2
+contract:
+  identity:
+    name: hover/dynamic-topology
+    task: hover
+    branch: exp/hover-dynamic-topology
+    prereg_commit: 1c58729
+    pr_number: 116
+    tracking_issue: 118
+  problem:
+    has_test_set: true
+    test_set_path: problems/chains/hover/full/test.py
+    test_set_sha256: e70408c04d40719ded076e5eff513f99e6a88c167614938cdb61cb693c6e9423
+    max_val_test_gap: null
+    fitness_type: fractional
+    metric_name: retrieval_coverage
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.003
+  runs:
+  - label: D1
+    prefix: chains/hover/static_soft
+    db: 9
+    condition: control
+    wave: 1
+    pipeline: guided
+    problem_name: chains/hover/static_soft
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: http://10.226.17.25:8001/v1
+    mutation_url: http://10.226.72.211:8777/v1
+    log_path: logs/D1.log
+    pid: 1461930
+    extra_overrides: []
+  - label: D2
+    prefix: chains/hover/static_soft
+    db: 10
+    condition: control
+    wave: 1
+    pipeline: guided
+    problem_name: chains/hover/static_soft
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: http://10.225.185.235:8001/v1
+    mutation_url: http://10.226.15.38:8777/v1
+    log_path: logs/D2.log
+    pid: 1208766
+    extra_overrides: []
+  - label: D5
+    prefix: chains/hover/full
+    db: 13
+    condition: treatment
+    wave: 1
+    pipeline: guided
+    problem_name: chains/hover/full
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: http://10.226.17.25:8000/v1
+    mutation_url: http://10.226.185.47:8777/v1
+    log_path: logs/D5.log
+    pid: 1461931
+    extra_overrides: []
+  - label: D6
+    prefix: chains/hover/full
+    db: 14
+    condition: treatment
+    wave: 1
+    pipeline: guided
+    problem_name: chains/hover/full
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: http://10.225.185.235:8000/v1
+    mutation_url: http://10.225.51.251:8777/v1
+    log_path: logs/D6.log
+    pid: 1461932
+    extra_overrides: []
+  servers:
+  - 10.226.17.25
+  - 10.225.185.235
+  - 10.226.72.211
+  - 10.226.15.38
+  - 10.226.185.47
+  - 10.225.51.251
+  custom_env:
+    HOVER_CHAIN_URL: per_run
+  max_generations: 25
+  stopping_rule:
+    description: ''
+    conditions: []
+    enforce_at: checkpoint
+  baseline:
+    reference: hover/feedback_softfit
+    mean: 54.37
+    metric: discrete_test_coverage
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-03-24T06:52:40.909585+00:00'
+    commit: a1a389822247099f2ee404b79ee161064912fa1e
+    confirmed_at: '2026-03-24T06:52:40.909599+00:00'
+  smoke_test:
+    completed: true
+    db: 8
+    generations: 3
+    log_path: smoke.log
+    completed_at: '2026-03-23T22:29:19Z'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-03-23T21:39:39.614605+00:00'
+    notes: Treatment is problem.name difference only (full vs static_soft). No extra_overrides. Verified by Check 12 (Hydra cfg dump) in preflight.
+telemetry:
+  checkpoints:
+  - gen: 9
+    timestamp: '2026-03-24T06:08:44.098033+00:00'
+    run_metrics:
+    - label: D1
+      gen: 10
+      best_fitness: 0.7756
+    - label: D2
+      gen: 10
+      best_fitness: 0.7667
+    - label: D3
+      gen: 9
+      best_fitness: 0.7544
+    - label: D4
+      gen: 9
+      best_fitness: 0.7567
+    - label: D5
+      gen: 9
+      best_fitness: 0.8222
+    - label: D6
+      gen: 9
+      best_fitness: 0.7944
+    - label: D7
+      gen: 9
+      best_fitness: 0.7789
+    - label: D8
+      gen: 9
+      best_fitness: 0.8256
+    notes: First checkpoint at ~38%. Treatment (D5-D8, mean=80.5%) leads control (D1-D4, mean=76.3%) by ~4.2pp. All 8 runs healthy.
+  - gen: 2
+    timestamp: '2026-03-24T07:25:40.097401+00:00'
+    run_metrics:
+    - label: D1
+      gen: 3
+      best_fitness: 0.78
+    - label: D2
+      gen: 2
+      best_fitness: 0.7544444444444445
+    - label: D5
+      gen: 2
+      best_fitness: 0.78
+    - label: D6
+      gen: 3
+      best_fitness: 0.7988888888888889
+    notes: Early checkpoint at ~10%. All runs healthy. stage_timeout bumped 3000->5000. 0% timeouts at new setting.
+  - gen: 4
+    timestamp: '2026-03-24T08:22:50.032805+00:00'
+    run_metrics:
+    - label: D1
+      gen: 5
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 4
+      best_fitness: 0.7566666666666666
+    - label: D5
+      gen: 3
+      best_fitness: 0.8022222222222222
+    - label: D6
+      gen: 5
+      best_fitness: 0.8433333333333333
+    notes: Checkpoint at ~16%. Treatment leading by ~5pp. 0% timeouts. D6 at 84.3%.
+  - gen: 5
+    timestamp: '2026-03-24T09:23:01.864577+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.7933333333333333
+    - label: D2
+      gen: 5
+      best_fitness: 0.7566666666666666
+    - label: D5
+      gen: 4
+      best_fitness: 0.8099999999999999
+    - label: D6
+      gen: 6
+      best_fitness: 0.8433333333333333
+    notes: Checkpoint at ~21%. Treatment (D5=81.0%, D6=84.3%) leading control (D1=79.3%, D2=75.7%) by ~5pp. 0% timeouts. All PIDs alive.
+  - gen: 5
+    timestamp: '2026-03-24T10:25:18.711053+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.8055555555555556
+    - label: D2
+      gen: 6
+      best_fitness: 0.7655555555555555
+    - label: D5
+      gen: 5
+      best_fitness: 0.8099999999999999
+    - label: D6
+      gen: 6
+      best_fitness: 0.8433333333333333
+    notes: Checkpoint at ~23%. Control mean 78.6%, treatment mean 82.7% (delta +4.1pp). D6 stalled ~50min in CallValidatorFunction (chain server 10.225.185.235:8000 slow); will auto-recover via stage_timeout. D1 improved 79.3%→80.6%. All PIDs alive.
+  - gen: 6
+    timestamp: '2026-03-24T11:24:44.122314+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.8055555555555556
+    - label: D2
+      gen: 7
+      best_fitness: 0.77
+    - label: D5
+      gen: 6
+      best_fitness: 0.8099999999999999
+    - label: D6
+      gen: 6
+      best_fitness: 0.8433333333333333
+    notes: 'Checkpoint at ~25%. Control mean 78.8%, treatment mean 82.7% (delta +3.9pp). All runs HEALTHY (diagnose: 0 MAJOR/CRITICAL). D6 stall from prior checkpoint resolved.'
+  - gen: 6
+    timestamp: '2026-03-24T12:24:16.986560+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.8055555555555556
+    - label: D2
+      gen: 8
+      best_fitness: 0.7766666666666666
+    - label: D5
+      gen: 7
+      best_fitness: 0.8099999999999999
+    - label: D6
+      gen: 6
+      best_fitness: 0.8433333333333333
+    notes: Checkpoint at ~27%. Control mean 79.1%, treatment mean 82.7% (delta +3.6pp). All runs HEALTHY (0 MAJOR/CRITICAL). D6 invalidity 23% — expected for dynamic topology producing complex mutants. Long DAG pipeline times (4000s+) due to mutation server LLM calls, not chain evaluation.
+  - gen: 7
+    timestamp: '2026-03-24T13:24:12.291222+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.8055555555555556
+    - label: D2
+      gen: 10
+      best_fitness: 0.7766666666666666
+    - label: D5
+      gen: 8
+      best_fitness: 0.8144444444444444
+    - label: D6
+      gen: 6
+      best_fitness: 0.8433333333333333
+    notes: Checkpoint at ~30%. Control mean 79.1%, treatment mean 82.9% (delta +3.8pp). D1/D6 MAJOR in diagnose = stall detection (straggler programs in gen 6, not real issues). D2 leading at gen 9. Tail-latency from expensive dynamic chains slows D1/D6 generation throughput.
+  - gen: 7
+    timestamp: '2026-03-24T19:24:35.222564+00:00'
+    run_metrics:
+    - label: D1
+      gen: 6
+      best_fitness: 0.7677777777777778
+    - label: D2
+      gen: 16
+      best_fitness: 0.7822222222222222
+    - label: D5
+      gen: 4
+      best_fitness: 0.7977777777777778
+    - label: D6
+      gen: 4
+      best_fitness: 0.8044444444444444
+    notes: D2 at 64%, others relaunched (D1/D5/D6 at gen 4-5). Treatment runs (D5/D6) showing strong early fitness ~80%. Test eval for D2 in progress.
+  - gen: 8
+    timestamp: '2026-03-24T20:26:25.272005+00:00'
+    run_metrics:
+    - label: D1
+      gen: 7
+      best_fitness: 0.7677777777777778
+    - label: D2
+      gen: 17
+      best_fitness: 0.7855555555555556
+    - label: D5
+      gen: 5
+      best_fitness: 0.8044444444444444
+    - label: D6
+      gen: 5
+      best_fitness: 0.8044444444444444
+    notes: Routine checkpoint. All healthy, 0 CRITICAL/MAJOR. D2 mid-run test eval done (51.73%). Runs mid-generation, awaiting D1/D5/D6 to catch up.
+  - gen: 9
+    timestamp: '2026-03-24T21:25:05.861896+00:00'
+    run_metrics:
+    - label: D1
+      gen: 8
+      best_fitness: 0.77
+    - label: D2
+      gen: 18
+      best_fitness: 0.7855555555555556
+    - label: D5
+      gen: 6
+      best_fitness: 0.8055555555555556
+    - label: D6
+      gen: 6
+      best_fitness: 0.8044444444444444
+    notes: All runs healthy (0 CRITICAL/MAJOR). D2 at 72%, D1 at 32%. Treatment runs D5/D6 at 24% but leading on fitness (80.4-80.6% vs 76.8-78.6% control).
+  - gen: 11
+    timestamp: '2026-03-24T22:25:53.447915+00:00'
+    run_metrics:
+    - label: D1
+      gen: 10
+      best_fitness: 0.77
+    - label: D2
+      gen: 20
+      best_fitness: 0.7855555555555556
+    - label: D5
+      gen: 8
+      best_fitness: 0.8144444444444444
+    - label: D6
+      gen: 7
+      best_fitness: 0.8044444444444444
+    notes: D2 at 80% (gen 20). D5 fitness jumped to 81.4%. D6 MAJOR=stall warning (waiting for slow validations, transient). Avg gen 45%, analyst trigger at next checkpoint.
+  - gen: 12
+    timestamp: '2026-03-24T23:25:49.787479+00:00'
+    run_metrics:
+    - label: D1
+      gen: 11
+      best_fitness: 0.77
+    - label: D2
+      gen: 21
+      best_fitness: 0.7855555555555556
+    - label: D5
+      gen: 9
+      best_fitness: 0.8144444444444444
+    - label: D6
+      gen: 8
+      best_fitness: 0.8044444444444444
+    notes: D2 at 84% (gen 21). D5 fitness stable at 81.4%. D6 MAJOR=stall warning (transient, high LLM invalidity). Avg gen 49% — analyst triggers next checkpoint.
+  - gen: 13
+    timestamp: '2026-03-25T00:26:44.149199+00:00'
+    run_metrics:
+    - label: D1
+      gen: 13
+      best_fitness: 0.7711111111111111
+    - label: D2
+      gen: 22
+      best_fitness: 0.7855555555555556
+    - label: D5
+      gen: 10
+      best_fitness: 0.8177777777777777
+    - label: D6
+      gen: 9
+      best_fitness: 0.8044444444444444
+    notes: 50%+ checkpoint with analyst. D2 at 88%. Treatment D5=81.8% leads all runs. D6 2 MAJOR (transient stall + high invalidity from complex code gen). D5 evolved 6-step chain (more efficient than fixed 7).
+  - gen: 14
+    timestamp: '2026-03-25T01:26:47.960804+00:00'
+    run_metrics:
+    - label: D1
+      gen: 14
+      best_fitness: 0.7711111111111111
+    - label: D2
+      gen: 23
+      best_fitness: 0.79
+    - label: D5
+      gen: 11
+      best_fitness: 0.8177777777777777
+    - label: D6
+      gen: 10
+      best_fitness: 0.8044444444444444
+    notes: D2 at 92% (gen 23). D6 CRITICAL=transient stall (straggler program in CallProgramFunction, will auto-recover via stage_timeout). D6 65% invalidity (hypothesis-relevant). Treatment delta +2.6pp.
+  - gen: 15
+    timestamp: '2026-03-25T02:25:35.611726+00:00'
+    run_metrics:
+    - label: D1
+      gen: 15
+      best_fitness: 0.7711111111111111
+    - label: D2
+      gen: 24
+      best_fitness: 0.79
+    - label: D5
+      gen: 12
+      best_fitness: 0.8177777777777777
+    - label: D6
+      gen: 11
+      best_fitness: 0.8044444444444444
+    notes: D2 at 96% (gen 24), D1 at 60%. All HEALTHY except D6 CRITICAL=transient stall (recovers each time). Treatment delta +2.6pp. D5 new rank02 program at 81.4%.
+  - gen: 16
+    timestamp: '2026-03-25T03:24:33.175074+00:00'
+    run_metrics:
+    - label: D1
+      gen: 17
+      best_fitness: 0.7711111111111111
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 13
+      best_fitness: 0.8177777777777777
+    - label: D6
+      gen: 12
+      best_fitness: 0.8044444444444444
+    notes: D2 COMPLETE (25/25, 79.0%). D1 at 68%, D5 at 52%, D6 at 48%. D6 diagnose CRITICAL=false alarm (stage_timeout TimeoutError in log, not a crash — PID alive). Treatment delta +2.8pp.
+  - gen: 18
+    timestamp: '2026-03-25T04:24:13.328135+00:00'
+    run_metrics:
+    - label: D1
+      gen: 18
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 15
+      best_fitness: 0.82
+    - label: D6
+      gen: 14
+      best_fitness: 0.8044444444444444
+    notes: D2 complete. D1 broke plateau to 78.4% (+1.3pp). D5 at 82.0% (new best). D6 77% invalidity but still advancing. Treatment delta +2.5pp (mean 81.2% vs 78.7%).
+  - gen: 18
+    timestamp: '2026-03-25T05:24:10.255827+00:00'
+    run_metrics:
+    - label: D1
+      gen: 19
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 16
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 15
+      best_fitness: 0.8044444444444444
+    notes: D5 hit 83.1% — new experiment best! D1 at 78.4%, D2 complete at 79.0%. D6 80% invalidity but advancing. Treatment delta +3.1pp (mean 81.8% vs 78.7%).
+  - gen: 19
+    timestamp: '2026-03-25T06:24:01.359874+00:00'
+    run_metrics:
+    - label: D1
+      gen: 21
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 17
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 16
+      best_fitness: 0.8044444444444444
+    notes: D1 80%, D5 68%, D6 64%. D6 advanced gen 15->16 despite diagnose CRITICAL (transient). Treatment delta +3.1pp. D5 still at 83.1% experiment best.
+  - gen: 20
+    timestamp: '2026-03-25T07:25:49.581048+00:00'
+    run_metrics:
+    - label: D1
+      gen: 22
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 18
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 17
+      best_fitness: 0.8044444444444444
+    notes: D1 88%, D5 72%, D6 68%. All advancing. D6 83% invalidity but gen 16->17. Treatment delta +3.1pp. Approaching final stretch.
+  - gen: 21
+    timestamp: '2026-03-25T08:24:49.118807+00:00'
+    run_metrics:
+    - label: D1
+      gen: 23
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 19
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 18
+      best_fitness: 0.8044444444444444
+    notes: D1 92% (gen 23), D5 76% (gen 19), D6 72% (gen 18). D1 two gens from completion. Treatment delta +3.1pp. All advancing.
+  - gen: 22
+    timestamp: '2026-03-25T09:23:44.026587+00:00'
+    run_metrics:
+    - label: D1
+      gen: 25
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 20
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 19
+      best_fitness: 0.8044444444444444
+    notes: D1 COMPLETE (25/25, 78.4%, 15.65h). Both control runs done. D5 80%, D6 76%. Treatment delta +3.1pp. Only treatment runs D5/D6 remain.
+  - gen: 23
+    timestamp: '2026-03-25T11:25:10.900403+00:00'
+    run_metrics:
+    - label: D1
+      gen: 25
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 23
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 21
+      best_fitness: 0.8044444444444444
+    notes: D1/D2 COMPLETE (25/25). D5 gen 22, D6 gen 21. D6 stalled 12.8h due to worker pool starvation (87% invalidity from CPF timeouts). Fix committed (560a768 per-stage pools) but D6 runs old code. D5 healthy at 83.1%. Control mean 78.7%, treatment mean 81.8% (delta +3.1pp).
+  - gen: 23
+    timestamp: '2026-03-25T12:51:43.612699+00:00'
+    run_metrics:
+    - label: D1
+      gen: 25
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 23
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 22
+      best_fitness: 0.8044444444444444
+    notes: FINAL checkpoint before closeout. D1/D2 complete (25/25). D5 stopped at 23/25 (researcher request). D6 stopped at 22/25 (worker leak bug caused 87% invalidity — CancelledError not caught in run_exec_runner, fix committed). Control mean 78.7%, treatment mean 81.8% (delta +3.1pp). D5 best=83.1% (9-step chain with 5 retrieval hops).
+  - gen: 23
+    timestamp: '2026-03-25T14:23:02.729425+00:00'
+    run_metrics:
+    - label: D1
+      gen: 25
+      best_fitness: 0.7844444444444444
+    - label: D2
+      gen: 25
+      best_fitness: 0.79
+    - label: D5
+      gen: 23
+      best_fitness: 0.8311111111111111
+    - label: D6
+      gen: 22
+      best_fitness: 0.8044444444444444
+    notes: 'Final post-completion checkpoint. All runs done: D1=25, D2=25, D5=23, D6=22. Test evals running on 4 dedicated chain servers. Awaiting results for closeout.'
+  mid_run_test_eval:
+    completed: true
+    completed_at: '2026-03-24T20:04:00Z'
+    notes: 'D2 only (gen 16/25, 64%). Coverage: 51.73% (std=1.53%, n=5). At baseline level. D1/D5/D6 too early (<50%) — deferred to closeout.'
+  checkpoint_analysis:
+    mid_run:
+      completed: true
+      completed_at: '2026-03-25T00:27:50.250816+00:00'
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 1462092
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

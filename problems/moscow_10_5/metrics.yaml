@@ -1,0 +1,121 @@
+specs:
+  fitness:
+    description: Robust counterexample margin 1-Phi-1e-10; positive clears the float64 candidate threshold
+    decimals: 10
+    is_primary: true
+    higher_is_better: true
+    lower_bound: -10.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.0001
+    sentinel_value: -1000.0
+  raw_margin:
+    description: Exact mathematical margin 1-Phi before the numerical counterexample tolerance
+    decimals: 12
+    is_primary: false
+    higher_is_better: true
+    lower_bound: -9.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.0001
+    sentinel_value: -1000.0
+  phi:
+    description: Normalized Moscow objective Phi=10 max_S sigma_min(A[S,:])^2; target is below 1
+    decimals: 10
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 10.0
+    include_in_prompts: true
+    significant_change: 0.0001
+    sentinel_value: 1000.0
+  max_min_eigenvalue:
+    description: max_S lambda_min(P[S,S]), equal to Phi/10
+    decimals: 10
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.00001
+    sentinel_value: 1000.0
+  basis_density:
+    description: Diversity descriptor only; fraction of subsets that are numerical matroid bases
+    decimals: 6
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.02
+    sentinel_value: -1.0
+  numerical_basis_count:
+    description: Number of subsets with lambda_min(P[S,S]) greater than 1e-10
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 1.0
+    upper_bound: 252.0
+    include_in_prompts: false
+    significant_change: 5.0
+    sentinel_value: 0.0
+  active_log_density:
+    description: Diversity descriptor only; log(active_count)/log(252) for the 95-percent active set
+    decimals: 6
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.02
+    sentinel_value: -1.0
+  active_count:
+    description: Diversity diagnostic; number of subsets within 95 percent of the maximum subset score
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 1.0
+    upper_bound: 252.0
+    include_in_prompts: false
+    significant_change: 2.0
+    sentinel_value: 0.0
+  leverage_cv:
+    description: Coefficient of variation of the ten row leverage scores
+    decimals: 6
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.02
+    sentinel_value: 1000.0
+  leverage_min:
+    description: Smallest diagonal entry of the rank-5 projector
+    decimals: 6
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.01
+    sentinel_value: -1.0
+  leverage_max:
+    description: Largest diagonal entry of the rank-5 projector
+    decimals: 6
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: false
+    significant_change: 0.01
+    sentinel_value: 1000.0
+  is_valid:
+    description: Whether the program returned a finite, numerically full-rank 10 x 5 matrix
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 1.0
+    sentinel_value: 0.0

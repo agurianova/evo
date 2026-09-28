@@ -1,0 +1,7 @@
+TASK — TABULAR BINARY CLASSIFICATION (classif-cat-large-0-road-safety)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-28]     numeric
+- [29]       categorical (integer code), 2 levels: 0=1 1=2
+- [30]       categorical (integer code), 2 levels: 0=1 1=2
+- [31]       categorical (integer code), 2 levels: 0=1 1=2

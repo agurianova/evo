@@ -1,0 +1,8 @@
+TASK — TABULAR REGRESSION (cooking-time)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-185]    numeric
+- [186-188]  binary (0/1)
+- [189]       categorical (integer code), 7 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6
+- [190]       categorical (integer code), 3 levels: 0=0 1=1 2=2
+- [191]       categorical (integer code), 2 levels: 0=0 1=1

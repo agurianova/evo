@@ -1,0 +1,5 @@
+TASK — TABULAR REGRESSION (weather)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-99]     numeric
+- [100-102]  binary (0/1)

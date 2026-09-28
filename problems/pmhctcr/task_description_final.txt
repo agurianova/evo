@@ -1,0 +1,35 @@
+pMHC-TCR recognition. Predict binder (label=1) vs non-binder (label=0).
+
+DATA
+ImmRep25: 8936 complexes, 20 pMHCs, 1000 TCRs.
+Per complex: sequences (mhca, epitope, tcra, tcrb), Boltz-2 PDB, MaSIF surface (tcr.npz, pmhc.npz).
+TCR tables store TRAV/TRAJ/TRBV/TRBJ and CDR3. CDR1/2 are IMGT germline loops of the V allele; FR1/2/3 flank them; FR4 is 11 aa after CDR3.
+
+DATASET STRUCTURE
+- Split unit is pMHC (`mhc_epitope_id`). Frozen r0: 12 train / 4 val / 4 test pMHCs (allele-stratified); no pMHC in two folds. TCRs may recur.
+- Class imbalance ~1:9 (~10% binders; ~45 pos vs ~400 neg per pMHC).
+- Fitness is Macro-AUCPR (unweighted mean over 4 val pMHCs). Also log Macro-AUC0.1.
+- Train columns: `label`, `mhc_epitope_id`, sequences, `pdb_path`, `masif_tcr_path`, `masif_pmhc_path`, `esm_*_path`. `score()` does not receive labels.
+
+ASSET LAYOUT
+- PDB: chains A/B = TCRα/β, C = peptide, D = MHC. Boltz-2 per-residue pLDDT is stored in the ATOM B-factor field.
+- MaSIF: `tcr.npz` is direct (`desc_straight`); `pmhc.npz` is flipped (`desc_flipped`). Do not toggle orientation.
+- Full MaSIF has ~4k points per side (80-d desc + xyz). `load_masif()` subsamples to 64 points; use `np.load(path)` when you need the full surface.
+- PDB loader: `load_pdb(pdb_path)` → xyz, aa, chain, plddt (Boltz-2 confidence from B-factor).
+- ESM-2 8M cache: `load_esm(path)` → pooled/cls/residue (320-d); slice by region via `regions.region_indices`.
+- Sequences: full chains `tcra_seq`, `tcrb_seq`, `mhca_seq`, `epitope_seq` (not CDR3-only). CDR3 + V-gene names locate IMGT regions.
+- CDR/FR masks: `regions.region_text` / `regions.region_indices` for per-modality slices (`full`, `cdr1`, `cdr2`, `cdr3`, `fr*`, `all_cdr`, `groove_a1a2`, …). Sequence and ESM can use different region masks.
+
+API
+entrypoint() returns an object with:
+  fit(train_df) -> None
+  score(rows_df) -> 1d float scores, higher = binder
+
+TRAINING CONTRACT (hard)
+- Primary loss: contrastive / ranking within one pMHC (`mhc_epitope_id`). Pull binders above non-binders of the same peptide–MHC.
+- Generalize across held-out pMHCs. Global BCE/focal only as a small aux term.
+- Batch or weight by pMHC when useful; hard negatives inside each pMHC are encouraged.
+
+MAP-ELITES (python_patch final)
+- Axes: `pmhc_tcr_interaction` × `compute_tier` (6×6).
+- `interaction_family` labels: `global_concat`, `explicit_patch_matching`, `bilinear_product`, `single_cross_attention`, `reciprocal_dual_attention`, `multi_branch_gated`.

@@ -1,0 +1,23 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-credit-g)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] duration_months numeric
+- [1] credit_amount numeric
+- [2] installment_rate_percent numeric
+- [3] residence_since numeric
+- [4] age_years   numeric
+- [5] existing_credits_count numeric
+- [6] people_liable numeric
+- [7] checking_status categorical (integer code), 4 levels: 0=0 <= ... < 200 DM 1=<0 DM 2=>= 200 DM / salary assignments for >= 1 year 3=no checking account
+- [8] credit_history categorical (integer code), 5 levels: 0=all credits at this bank paid duly 1=critical account / other credits existing 2=delay in paying off in past 3=existing credits paid duly till now 4=no credits taken / all paid duly
+- [9] credit_purpose categorical (integer code), 10 levels: 0=business 1=car (new) 2=car (used) 3=domestic appliances 4=education 5=furniture/equipment 6=others 7=radio/television 8=repairs 9=retraining
+- [10] savings_status categorical (integer code), 5 levels: 0=100 <= ... < 500 DM 1=500 <= ... < 1000 DM 2=< 100 DM 3=>= 1000 DM 4=unknown / no savings
+- [11] employment_since categorical (integer code), 5 levels: 0=1 <= ... < 4 years 1=4 <= ... < 7 years 2=< 1 year 3=>= 7 years 4=unemployed
+- [12] personal_status_sex categorical (integer code), 4 levels: 0=female: divorced/separated/married 1=male: divorced/separated 2=male: married/widowed 3=male: single
+- [13] other_debtors categorical (integer code), 3 levels: 0=co-applicant 1=guarantor 2=none
+- [14] property    categorical (integer code), 4 levels: 0=building society savings / life insurance 1=car or other (not savings) 2=real estate 3=unknown / no property
+- [15] other_installment_plans categorical (integer code), 3 levels: 0=bank 1=none 2=stores
+- [16] housing     categorical (integer code), 3 levels: 0=for free 1=own 2=rent
+- [17] job         categorical (integer code), 4 levels: 0=management / self-employed / highly qualified 1=skilled employee / official 2=unemployed / unskilled non-resident 3=unskilled resident
+- [18] telephone   categorical (integer code), 2 levels: 0=none 1=yes, registered
+- [19] foreign_worker categorical (integer code), 2 levels: 0=no 1=yes

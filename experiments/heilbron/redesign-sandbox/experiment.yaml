@@ -1,0 +1,196 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/redesign-sandbox
+    task: heilbron
+    branch: exp/heilbron/redesign-sandbox
+    pr_number: null
+    tracking_issue: null
+    prereg_commit: null
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    pipeline: adversarial_asymmetric
+    shared_overrides:
+      num_parents: 1
+      max_elites_per_generation: 8
+      max_mutations_per_generation: 8
+      stage_timeout: 1800
+      dag_timeout: 1800
+      mutation_mode: rewrite
+      significant_change: 0.01
+      inner_iterations: 1
+      n_opponents: 3
+      source_prompt_k: 3
+      archive_reeval: true
+  runs:
+  - label: A_G
+    db: 1
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Sandbox A (Composition K=3): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2219156
+    log_path: run_A_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - n_opponents=3
+    - source_prompt_k=3
+    - pipeline_builder.archive_reeval=true
+    - opponent_provider.cache_ttl=2.0
+    - post_step_hook=\${composition_injection_hook}
+    role: constructor
+  - label: A_D
+    db: 2
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Sandbox A (Composition K=3): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2219157
+    log_path: run_A_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=24
+    - sync_min_delta=1
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    - n_opponents=3
+    - source_prompt_k=3
+    - pipeline_builder.archive_reeval=true
+    - opponent_provider.cache_ttl=2.0
+    role: improver
+  - label: B_G
+    db: 3
+    prefix: heilbron_adversarial/pop_a
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_a
+    condition: 'Sandbox B (Gradient-in-prompt K=3): Constructor'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2219158
+    log_path: run_B_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_adversarial/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    - n_opponents=3
+    - source_prompt_k=3
+    - pipeline_builder.archive_reeval=true
+    - opponent_provider.cache_ttl=2.0
+    role: constructor
+  - label: B_D
+    db: 4
+    prefix: heilbron_adversarial/pop_b
+    pipeline: adversarial_asymmetric
+    problem_name: heilbron_adversarial/pop_b
+    condition: 'Sandbox B (Gradient-in-prompt K=3): Improver'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2219159
+    log_path: run_B_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - max_mutations_per_generation=24
+    - sync_min_delta=1
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_adversarial/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - d_sees_g_source=true
+    - d_archive_persistent=true
+    - n_opponents=3
+    - source_prompt_k=3
+    - pipeline_builder.archive_reeval=true
+    - opponent_provider.cache_ttl=2.0
+    role: improver
+  servers: []
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 8
+  baseline:
+    reference: null
+    mean: null
+    metric: null
+  tools: []
+lifecycle:
+  status: preregistered
+  launch:
+    time: null
+    commit: null
+    confirmed_at: null
+  smoke_test:
+    completed: false
+    db: null
+    generations: 8
+    log_path: null
+    completed_at: null
+  treatment_verification:
+    completed: false
+    completed_at: null
+    note: null
+telemetry:
+  checkpoints: []
+  mid_run_test_eval:
+    completed: false
+    completed_at: null
+  checkpoint_analysis:
+    mid_run:
+      completed: false
+      completed_at: null
+  treatment_checks:
+    completed: false
+    completed_at: null
+    results: []
+control_plane:
+  watchdog:
+    plugin: solo
+    sentinel_value: -1000.0
+    plot_metrics:
+    - fitness
+    - actual_fitness
+    plot_commands: []
+    alert_thresholds:
+      invalidity_rate: 0.95
+      stagnation_window: 100
+      generation_gap_threshold: 100
+    poll_interval_s: 600
+    plot_retries: 3
+    plot_retry_delay_s: 30
+    rolling_comment_threshold_hours: 24
+    checkpoint_milestones: []
+    no_proxy_hosts:
+    - 10.232.30.185
+  notifications:
+    pr:
+      enabled: false
+      comment_mode: rolling
+    telegram:
+      enabled: false
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: null
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

@@ -1,0 +1,6 @@
+TASK — TABULAR REGRESSION (house)
+
+DATASET — 1990 US Census survey regions; predict regional median house price (USD, top-coded near 500001); the 16 numeric features are an anonymized, normalized census-attribute subset
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-15]     numeric

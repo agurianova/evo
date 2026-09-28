@@ -1,0 +1,9 @@
+TASK — TABULAR REGRESSION (tabarena-healthcare-insurance-expenses)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] age         numeric
+- [1] bmi         numeric
+- [2] children    numeric
+- [3] sex         categorical (integer code), 2 levels: 0=female 1=male
+- [4] smoker      categorical (integer code), 2 levels: 0=no 1=yes
+- [5] region      categorical (integer code), 4 levels: 0=northeast 1=northwest 2=southeast 3=southwest

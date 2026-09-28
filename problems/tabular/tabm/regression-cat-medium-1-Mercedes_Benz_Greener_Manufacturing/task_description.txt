@@ -1,0 +1,7 @@
+TASK — TABULAR REGRESSION (regression-cat-medium-1-Mercedes_Benz_Greener_Manufacturing)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-355]    binary (0/1)
+- [356]       categorical (integer code), 7 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6
+- [357]       categorical (integer code), 4 levels: 0=0 1=1 2=2 3=3
+- [358]       categorical (integer code), 12 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8 9=9 10=10 11=11

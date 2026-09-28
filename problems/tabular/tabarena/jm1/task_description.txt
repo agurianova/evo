@@ -1,0 +1,24 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-jm1)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] loc         numeric
+- [1] v(g)        numeric
+- [2] ev(g)       numeric
+- [3] iv(g)       numeric
+- [4] n           numeric
+- [5] v           numeric
+- [6] l           numeric
+- [7] d           numeric
+- [8] i           numeric
+- [9] e           numeric
+- [10] b           numeric
+- [11] t           numeric
+- [12] lOCode      numeric
+- [13] lOComment   numeric
+- [14] lOBlank     numeric
+- [15] locCodeAndComment numeric
+- [16] uniq_Op     numeric
+- [17] uniq_Opnd   numeric
+- [18] total_Op    numeric
+- [19] total_Opnd  numeric
+- [20] branchCount numeric

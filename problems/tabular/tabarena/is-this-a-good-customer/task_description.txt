@@ -1,0 +1,16 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-is-this-a-good-customer)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] month       numeric
+- [1] credit_amount numeric
+- [2] credit_term numeric
+- [3] age         numeric
+- [4] income      numeric
+- [5] sex         categorical (integer code), 2 levels: 0=female 1=male
+- [6] education   categorical (integer code), 5 levels: 0=Higher education 1=Incomplete higher education 2=Incomplete secondary education 3=Secondary education 4=Secondary special education
+- [7] product_type categorical (integer code), 20 levels: 0=Audio & Video 1=Auto 2=Boats 3=Cell phones 4=Clothing 5=Computers 6=Construction Materials 7=Cosmetics and beauty services 8=Fitness 9=Furniture 10=Garden equipment 11=Household appliances 12=Jewelry 13=Medical services 14=Music 15=Repair Services 16=Sporting goods 17=Tourism 18=Training 19=Windows & Doors
+- [8] having_children_flg categorical (integer code), 2 levels: 0=0 1=1
+- [9] region      categorical (integer code), 3 levels: 0=0 1=1 2=2
+- [10] family_status categorical (integer code), 3 levels: 0=Another 1=Married 2=Unmarried
+- [11] phone_operator categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4
+- [12] is_client   categorical (integer code), 2 levels: 0=0 1=1

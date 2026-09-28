@@ -1,0 +1,22 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-churn)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] account_length numeric
+- [1] number_vmail_messages numeric
+- [2] total_day_minutes numeric
+- [3] total_day_calls numeric
+- [4] total_day_charge numeric
+- [5] total_eve_minutes numeric
+- [6] total_eve_calls numeric
+- [7] total_eve_charge numeric
+- [8] total_night_minutes numeric
+- [9] total_night_calls numeric
+- [10] total_night_charge numeric
+- [11] total_intl_minutes numeric
+- [12] total_intl_calls numeric
+- [13] total_intl_charge numeric
+- [14] number_customer_service_calls numeric
+- [15] state       categorical (integer code), 51 levels: 0=0 1=1 2=10 3=11 4=12 5=13 ... 50=9
+- [16] area_code   categorical (integer code), 3 levels: 0=408.0 1=415.0 2=510.0
+- [17] international_plan categorical (integer code), 2 levels: 0=0 1=1
+- [18] voice_mail_plan categorical (integer code), 2 levels: 0=0 1=1

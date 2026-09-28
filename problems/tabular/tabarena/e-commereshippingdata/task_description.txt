@@ -1,0 +1,13 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-e-commereshippingdata)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Customer_care_calls numeric
+- [1] Customer_rating numeric
+- [2] Cost_of_the_Product numeric
+- [3] Prior_purchases numeric
+- [4] Discount_offered numeric
+- [5] Weight_in_gms numeric
+- [6] Warehouse_block categorical (integer code), 5 levels: 0=A 1=B 2=C 3=D 4=F
+- [7] Mode_of_Shipment categorical (integer code), 3 levels: 0=Flight 1=Road 2=Ship
+- [8] Product_importance categorical (integer code), 3 levels: 0=high 1=low 2=medium
+- [9] Gender      categorical (integer code), 2 levels: 0=F 1=M

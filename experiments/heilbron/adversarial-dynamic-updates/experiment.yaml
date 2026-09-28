@@ -1,0 +1,372 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/adversarial-dynamic-updates
+    task: heilbron
+    branch: exp/heilbron/adversarial-dynamic-updates
+    prereg_commit: ebc12cc3
+    pr_number: 197
+    tracking_issue: 195
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.01
+    n_opponents: 5
+    per_opponent_timeout: 300
+    max_in_flight: 8
+  runs:
+  - label: SOFT_RE_A
+    db: 1
+    prefix: heilbron_adversarial/pop_a_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_a_soft
+    condition: 'Cell SOFT_RE: G=soft quality+resistance, re-eval ON — Constructor (Pop A soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=true
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_adversarial/pop_b_soft
+    - opponent_feedback_k=3
+    - population_role=constructor
+    pid: 856366
+    log_path: run_SOFT_RE_A.log
+  - label: SOFT_RE_B
+    db: 2
+    prefix: heilbron_adversarial/pop_b_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_b_soft
+    condition: 'Cell SOFT_RE: G=soft quality+resistance, re-eval ON — Improver (Pop B soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=true
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_adversarial/pop_a_soft
+    - opponent_feedback_k=3
+    - population_role=improver
+    pid: 856367
+    log_path: run_SOFT_RE_B.log
+  - label: SOFT_C_A
+    db: 3
+    prefix: heilbron_adversarial/pop_a_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_a_soft
+    condition: 'Cell SOFT_C: G=soft quality+resistance, re-eval OFF — Constructor (Pop A soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=false
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_adversarial/pop_b_soft
+    - opponent_feedback_k=3
+    - population_role=constructor
+    pid: 856368
+    log_path: run_SOFT_C_A.log
+  - label: SOFT_C_B
+    db: 4
+    prefix: heilbron_adversarial/pop_b_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_b_soft
+    condition: 'Cell SOFT_C: G=soft quality+resistance, re-eval OFF — Improver (Pop B soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=false
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_adversarial/pop_a_soft
+    - opponent_feedback_k=3
+    - population_role=improver
+    pid: 856369
+    log_path: run_SOFT_C_B.log
+  - label: GAN_RE_A
+    db: 5
+    prefix: heilbron_adversarial/pop_a_gan
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_a_gan
+    condition: 'Cell GAN_RE: G=strict GAN pure resistance, re-eval ON — Constructor (Pop A GAN)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=true
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_adversarial/pop_b_soft
+    - opponent_feedback_k=3
+    - population_role=constructor
+    pid: 856370
+    log_path: run_GAN_RE_A.log
+  - label: GAN_RE_B
+    db: 6
+    prefix: heilbron_adversarial/pop_b_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_b_soft
+    condition: 'Cell GAN_RE: G=strict GAN pure resistance, re-eval ON — Improver (Pop B soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=true
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_adversarial/pop_a_gan
+    - opponent_feedback_k=3
+    - population_role=improver
+    pid: 856371
+    log_path: run_GAN_RE_B.log
+  - label: GAN_C_A
+    db: 7
+    prefix: heilbron_adversarial/pop_a_gan
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_a_gan
+    condition: 'Cell GAN_C: G=strict GAN pure resistance, re-eval OFF — Constructor (Pop A GAN)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=false
+    - opponent_redis_db=8
+    - opponent_redis_prefix=heilbron_adversarial/pop_b_soft
+    - opponent_feedback_k=3
+    - population_role=constructor
+    pid: 856372
+    log_path: run_GAN_C_A.log
+  - label: GAN_C_B
+    db: 8
+    prefix: heilbron_adversarial/pop_b_soft
+    pipeline: adversarial_coevo_feedback
+    problem_name: heilbron_adversarial/pop_b_soft
+    condition: 'Cell GAN_C: G=strict GAN pure resistance, re-eval OFF — Improver (Pop B soft)'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    extra_overrides:
+    - pipeline_builder.archive_reeval=false
+    - opponent_redis_db=7
+    - opponent_redis_prefix=heilbron_adversarial/pop_a_gan
+    - opponent_feedback_k=3
+    - population_role=improver
+    pid: 856373
+    log_path: run_GAN_C_B.log
+  servers:
+  - 10.232.30.185
+  custom_env:
+    GIGAEVO_PYTHON: /home/jovyan/.mlspace/envs/evo/bin/python3
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 75
+  stopping_rule:
+    description: max_generations=75 OR actual_fitness<0.005_at_gen20 OR invalidity>75pct_for_5_consecutive_gens OR futility_at_gen30
+    conditions:
+    - kind: fitness_plateau
+      threshold: 0.005
+      window: 20
+      note: extracted from v1 prose (<metric><T_at_genN pattern)
+    - kind: fitness_plateau
+      threshold: null
+      window: 30
+      note: extracted from v1 prose (bare futility_at_genN, no threshold)
+    - kind: invalidity_window
+      threshold: 0.75
+      window: 5
+      note: extracted from v1 prose (invalidity>Xpct_for_N_consecutive_gens)
+    enforce_at: checkpoint
+  baseline:
+    reference: heilbron/adversarial-v2
+    mean: 0.03464
+    metric: actual_fitness
+  tools:
+  - name: run_watchdog.py
+    purpose: Status updates, re-evaluation counter monitoring, generation parity check
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-09T22:24:12.487796+00:00'
+    commit: 2ff4577b6da4e0e8cfb445eca5209169c5819a20
+    confirmed_at: '2026-04-09T22:24:12.495006+00:00'
+  smoke_test:
+    completed: true
+    db: 1
+    generations: 3
+    log_path: smoke.log
+    completed_at: '2026-04-09T16:16:15.264424+00:00'
+    notes: 0 CRITICAL errors, FetchOpponentIds/FetchOpponentResults stages in DAG, pipeline initialization successful.
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-09T16:00:03.180365+00:00'
+telemetry:
+  checkpoints:
+  - gen: 2
+    timestamp: '2026-04-09T22:34:03.664893+00:00'
+    run_metrics:
+    - label: SOFT_RE_A
+      gen: 3
+      best_fitness: 0.17239
+    - label: SOFT_RE_B
+      gen: 2
+      best_fitness: 0.64795
+    - label: SOFT_C_A
+      gen: 2
+      best_fitness: 0.05585
+    - label: SOFT_C_B
+      gen: 2
+      best_fitness: 0.83139
+    - label: GAN_RE_A
+      gen: 3
+      best_fitness: 0.36583
+    - label: GAN_RE_B
+      gen: 2
+      best_fitness: 0.73203
+    - label: GAN_C_A
+      gen: 2
+      best_fitness: 0.4937
+    - label: GAN_C_B
+      gen: 2
+      best_fitness: 0.6285
+    notes: 'Restart 3 (post higher_is_better fix). All 8 runs alive, gen=1, 0% invalidity. Diagnose: all HEALTHY (1 MINOR each = insufficient history at gen 1, expected).'
+  - gen: 17
+    timestamp: '2026-04-10T01:33:39.502905+00:00'
+    run_metrics:
+    - label: SOFT_RE_A
+      gen: 20
+      best_fitness: 0.45462
+    - label: SOFT_RE_B
+      gen: 20
+      best_fitness: 0.87796
+    - label: SOFT_C_A
+      gen: 8
+      best_fitness: 0.62454
+    - label: SOFT_C_B
+      gen: 8
+      best_fitness: 0.77133
+    - label: GAN_RE_A
+      gen: 15
+      best_fitness: 0.48942
+    - label: GAN_RE_B
+      gen: 15
+      best_fitness: 0.92047
+    - label: GAN_C_A
+      gen: 26
+      best_fitness: 0.99465
+    - label: GAN_C_B
+      gen: 26
+      best_fitness: 0.84054
+    notes: 'Checkpoint 2. SOFT_C deadlock (gen 0-7) resolved via ProgressBasedSyncHook. All 8 runs alive. Diagnose: all HEALTHY/MINOR. SOFT_RE_B and GAN_RE_B show fitness stagnation (hypothesis-relevant). No stopping rule violations.'
+  - gen: 21
+    timestamp: '2026-04-10T02:21:50.480425+00:00'
+    run_metrics:
+    - label: SOFT_RE_A
+      gen: 24
+      best_fitness: 0.47929
+    - label: SOFT_RE_B
+      gen: 24
+      best_fitness: 0.87796
+    - label: SOFT_C_A
+      gen: 12
+      best_fitness: 0.63483
+    - label: SOFT_C_B
+      gen: 12
+      best_fitness: 0.88984
+    - label: GAN_RE_A
+      gen: 20
+      best_fitness: 0.5478
+    - label: GAN_RE_B
+      gen: 19
+      best_fitness: 0.92047
+    - label: GAN_C_A
+      gen: 31
+      best_fitness: 0.99602
+    - label: GAN_C_B
+      gen: 31
+      best_fitness: 0.79188
+    notes: 'Checkpoint 3. All 8 PIDs alive. Diagnose: GAN_RE_B MAJOR flagged but DAG errors frozen at 9 (1.94%, historical from cold-start, not growing). SOFT_RE_B/GAN_RE_B stagnation ongoing (hypothesis-relevant). GAN_C_A/B leading at gen=30-31. No stopping rule violations.'
+  - gen: 30
+    timestamp: '2026-04-10T05:37:53.747249+00:00'
+    run_metrics:
+    - label: SOFT_RE_A
+      gen: 37
+      best_fitness: 0.49603
+    - label: SOFT_RE_B
+      gen: 37
+      best_fitness: 0.87796
+    - label: SOFT_C_A
+      gen: 24
+      best_fitness: 0.68641
+    - label: SOFT_C_B
+      gen: 24
+      best_fitness: 0.8209
+    - label: GAN_RE_A
+      gen: 30
+      best_fitness: 0.48942
+    - label: GAN_RE_B
+      gen: 29
+      best_fitness: 0.92047
+    - label: GAN_C_A
+      gen: 32
+      best_fitness: 0.99602
+    - label: GAN_C_B
+      gen: 34
+      best_fitness: 0.79188
+    notes: Checkpoint 4. Futility stopping rule triggered at gen=30 (H1 gap=0.012>>0.005 threshold). GAN_RE_A actual_fitness=0.01379 vs control avg=0.03020. Researcher action required. GAN_C_B CRITICAL false positive (sync wait). All 8 PIDs alive.
+  - gen: 32
+    timestamp: '2026-04-10T06:24:49.742112+00:00'
+    run_metrics:
+    - label: SOFT_RE_A
+      gen: 41
+      best_fitness: 0.50228
+    - label: SOFT_RE_B
+      gen: 41
+      best_fitness: 0.87796
+    - label: SOFT_C_A
+      gen: 28
+      best_fitness: 0.68641
+    - label: SOFT_C_B
+      gen: 28
+      best_fitness: 0.7416
+    - label: GAN_RE_A
+      gen: 30
+      best_fitness: 0.48942
+    - label: GAN_RE_B
+      gen: 29
+      best_fitness: 0.92047
+    - label: GAN_C_A
+      gen: 32
+      best_fitness: 0.99602
+    - label: GAN_C_B
+      gen: 34
+      best_fitness: 0.79188
+    notes: Checkpoint 5. GAN pairs in extended sync wait (all 4 since ~04:21-04:41 UTC, self-resolving via 7200s timeout). SOFT pairs progressing normally (SOFT_RE gen=40-41, SOFT_C gen=27-28). Futility stopping rule still pending researcher decision (GAN_RE_A actual_fitness=0.01379, H1 gap=0.012>>0.005). Mid-run analyst flagged R5 frozen fitness and R1 lagging. All 8 PIDs alive.
+  mid_run_test_eval: {}
+  checkpoint_analysis:
+    mid_run:
+      completed: true
+      completed_at: '2026-04-10T06:24:36.027325+00:00'
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 859943
+  anomaly_detector_cron_id: 29527c23
+  checkpoint_cron_id: 0cbd8ead

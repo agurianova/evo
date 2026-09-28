@@ -1,0 +1,6 @@
+TASK — TABULAR REGRESSION (delivery-eta)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-220]    numeric
+- [221]      binary (0/1)
+- [222]       categorical (integer code), 2 levels: 0=0 1=1

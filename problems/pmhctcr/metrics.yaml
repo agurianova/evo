@@ -1,0 +1,157 @@
+specs:
+  fitness:
+    description: Macro-AUCPR over val pMHCs (unweighted mean average precision).
+    decimals: 5
+    is_primary: true
+    higher_is_better: true
+    lower_bound: -1.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.01
+  is_valid:
+    description: Whether fit and per-pMHC AUCPR / AUC0.1 succeeded.
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 1.0
+  mean_aucpr:
+    description: Same as fitness (Macro-AUCPR); kept as a named log field.
+    decimals: 5
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.01
+  mean_auc01:
+    description: Macro-AUC0.1 over the same val pMHCs (ImmRep25 McClish, FPR<=0.1). Logged, not primary.
+    decimals: 5
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.01
+  min_auc01:
+    description: Worst val pMHC AUC0.1.
+    decimals: 5
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.01
+  min_aucpr:
+    description: Worst val pMHC AUCPR.
+    decimals: 5
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 1.0
+    include_in_prompts: true
+    significant_change: 0.01
+  n_scored:
+    description: Number of val pairs scored.
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 10000.0
+    include_in_prompts: false
+    significant_change: 1.0
+  n_pmhc:
+    description: Number of val pMHCs with defined AUCPR and AUC0.1.
+    decimals: 0
+    is_primary: false
+    higher_is_better: true
+    lower_bound: 0.0
+    upper_bound: 4.0
+    include_in_prompts: false
+    significant_change: 1.0
+  modality_mix:
+    description: Compressed MAP-Elites pathway. 0=sequence, 1=surface (pdb off), 2=structure (masif off), 3=structure+surface.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 3.0
+    include_in_prompts: false
+    significant_change: 1.0
+  interaction_kind:
+    description: MAP-Elites interaction family. 0=none, 1=product, 2=abs_diff, 3=bilinear, 4=cross_attn 1 pair, 5=cross_attn 2+ pairs, 6=fusion gated_sum, 7=fusion cross_attention.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 7.0
+    include_in_prompts: false
+    significant_change: 1.0
+  modality_count:
+    description: Number of active modalities used by the predictor (1–3 among sequence, structure, surface). Logged; not a Python MAP-Elites axis.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 1.0
+    upper_bound: 3.0
+    include_in_prompts: false
+    significant_change: 1.0
+  arch_kind:
+    description: Python MAP-Elites architecture family. 0=linear/MLP, 1=modality-token MHA/gated fusion, 2=geometric PDB/MaSIF graphs, 3=interface cross-attn pMHC↔TCR (MaSIF patches and/or PDB residues).
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 3.0
+    include_in_prompts: false
+    significant_change: 1.0
+  pmhc_tcr_interaction:
+    description: Final python_patch MAP-Elites pMHC–TCR interaction family. 0=global/concat, 1=explicit patch matching, 2=bilinear/product, 3=single cross-attention, 4=reciprocal/dual attention, 5=multi-branch gated.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 5.0
+    include_in_prompts: false
+    significant_change: 1.0
+  compute_tier:
+    description: Logarithmic model-capacity bin floor(log10(n_params)), clipped to 0–5. Python MAP-Elites axis.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 5.0
+    include_in_prompts: false
+    significant_change: 1.0
+  compute_cost:
+    description: Estimated trainable parameter count from the genotype. Logged, not a MAP-Elites axis.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 100000000.0
+    sentinel_value: -1.0
+    include_in_prompts: false
+    significant_change: 1.0
+  n_params:
+    description: Same estimate as compute_cost; stored for logs.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 100000000.0
+    sentinel_value: -1.0
+    include_in_prompts: false
+    significant_change: 1.0
+  est_flops:
+    description: Estimated one-complex forward FLOPs from n_params and typical ImmRep25 sizes.
+    decimals: 0
+    is_primary: false
+    higher_is_better: false
+    lower_bound: 0.0
+    upper_bound: 1000000000000.0
+    sentinel_value: -1.0
+    include_in_prompts: false
+    significant_change: 1.0

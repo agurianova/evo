@@ -1,0 +1,48 @@
+# @package _global_
+# pMHC-TCR with Python SEARCH/REPLACE genome (not JSON genotype operators).
+# Memory Cards (v2) record successful/failed mutation mechanisms and feed them
+# back into MutationSuggestion via MemoryContextStage.
+
+defaults:
+  - /experiment/pmhctcr
+  - override /mutation: python_patch
+  - override /algorithm: pmhctcr_python_2d
+  - override /pipeline: memory_guided
+  - override /memory: v2
+  - override /memory/llm: codex
+  - _self_
+
+# Must restated after pmhctcr _self_, which pins seed.py + JSON-operator prompts.
+loader:
+  pattern: python_patch_seed.py
+
+prompts:
+  dir: ${problem.dir}/prompts_python_patch
+
+# Retain regressed/failed evaluated children as negative mechanism evidence,
+# rather than authoring cards only from archive members or positive gains.
+memory:
+  writer:
+    require_archive_or_positive_gain: false
+
+# Keep the longer validator budget while using the memory-guided DAG.
+pipeline_builder:
+  _target_: problems.pmhctcr.pipeline.PmhctcrMemoryGuidedPipelineBuilder
+  ctx: ${evolution_context}
+  stage_timeout: ${stage_timeout}
+  dag_timeout: ${dag_timeout}
+  max_parallel: ${dag_concurrency}
+  max_insights: ${max_insights}
+  max_code_length: ${max_code_length}
+  archive_gate_enabled: ${archive_gate_enabled}
+  intra_max_children: 24
+  mutation_mode: ${mutation_mode}
+  enable_optuna_stage: ${enable_optuna_stage}
+  optimization_time_budget: ${optimization_time_budget}
+  program_format_feature: ${ref:program_format.evaluation_feature}
+  fresh_context_reorder: true
+  reverse_repack: false
+  no_card_control_probability: 0.10
+  memory_block_last: false
+  enable_chain_structural_metrics: ${enable_chain_structural_metrics}
+  validator_timeout: ${validator_timeout}

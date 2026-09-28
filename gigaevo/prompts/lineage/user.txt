@@ -1,0 +1,31 @@
+## TASK
+
+{task_description}
+
+## PRIMARY METRIC
+
+{metric_name} — {metric_description}
+Direction: {higher_is_better_text}
+Observed delta: {delta:+.5f} → {delta_interpretation}
+
+## ADDITIONAL METRICS
+
+{additional_metrics}
+
+{shared_subset_block}
+## ERRORS
+
+Parent: {parent_errors}
+Child: {child_errors}
+
+## DIFF
+
+{diff_blocks}
+
+## PARENT CODE (reference)
+
+```python
+{parent_code}
+```
+
+Return 3-5 transition insights matching the schema, OUTPUT format, and RULES defined in the system prompt. Each `description` must include hunk reference, mechanism + transferable rule, and quantification (≤40 words). No prose, no preamble, no fences.

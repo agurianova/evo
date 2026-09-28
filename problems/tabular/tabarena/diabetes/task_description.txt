@@ -1,0 +1,11 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-diabetes)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Pregnancies numeric
+- [1] Glucose     numeric
+- [2] BloodPressure numeric
+- [3] SkinThickness numeric
+- [4] Insulin     numeric
+- [5] BMI         numeric
+- [6] DiabetesPedigreeFunction numeric
+- [7] Age         numeric

@@ -1,0 +1,109 @@
+Handoff — start mutation operators for pMHC-TCR
+================================================
+Worktree : gigaevo-core-internal-pmhctcr-20260915
+Branch   : codex/pmhctcr-20260915
+Parent   : gigaevo-core-internal @ 11005059 (tab_wpf prototype)
+Do not edit gigaevo-core-internal, gigaevo-core-internal-bio, or inverse-v3 copies.
+
+TZ for operators: this message (v2.0) and report/matation_operator.txt (v1 notes).
+Locked split/eval: report/r0_train_val_test.txt, report/evaluation_protocol.txt.
+
+
+1. What this chat already locked (do not change)
+------------------------------------------------
+Isolated git worktree only. All pmhctcr work stays here.
+
+Data (ImmRep25, tables in problems/pmhctcr/tables/):
+  8936 pairs, 20 pMHC, 1000 TCR, ~10% positives
+  sequences: mhca, epitope (peptide), tcra, tcrb
+  PDB + MaSIF still in immrep25.tar.part1+part2 (concatenate before extract)
+  MaSIF: masif/{cpx}/tcr.npz and pmhc.npz (desc / desc_straight / desc_flipped)
+  PDB: pdb/{cpx}.pdb  chains A/B=TCR, C=peptide, D=MHC
+  2 MaSIF failures dropped from ImmRep25: cpx_3419271, cpx_3420373
+
+Split r0 (problems/pmhctcr/splits/r0.json, seed 0):
+  unit = pMHC (mhc_epitope_id), not TCR
+  12 / 4 / 4, allele 6+6 / 2+2 / 2+2 (A*02:01, B*40:01)
+  all 8936 pairs kept
+  TCR may appear in several folds (pMHC-out, not TCR-out)
+  train 5378 / 541 pos; val 1786 / 183 pos; test 1772 / 181 pos
+
+Evaluator (do not modify when adapting operators — TZ §1, §7):
+  fit(train) → score(val) in validate(); test.py is once, after selection
+  score() does not get labels
+  per-pMHC AUCPR = sklearn average_precision_score
+  per-pMHC AUC0.1 = sklearn roc_auc_score(..., max_fpr=0.1)  McClish (ImmRep25)
+  macro = unweighted mean over the 4 pMHCs of that fold (not pooled)
+  GigaEvo fitness = Macro-AUC0.1
+  mean_aucpr = Macro-AUCPR (logged, in prompts)
+  invalid → is_valid=0, fitness=-1
+
+Current predictor API (Python seed, not yet the JSON genotype):
+  entrypoint() → object with fit(train_df), score(rows_df) → 1d floats
+  seed: problems/pmhctcr/initial_programs/cdr3_logistic.py
+
+Bugbot on this evaluation: no bugs.
+
+
+2. What is NOT done
+-------------------
+JSON genotype schema (TZ §3)
+mutation operators CHANGE_* / NOOP / REJECTED (TZ §6)
+repair (TZ §5)
+integrity checks (TZ §4)
+genotype compiler → Python (TZ §11)
+bandit scheduler (TZ §9)
+compute penalty fitness_adj (TZ §8)
+PDB/MaSIF extraction into problems/pmhctcr/{pdb,masif}
+GigaEvo experiment yaml wired to JSON mutation (config/experiment/pmhctcr.yaml
+  still python_source + directory loader)
+
+
+3. How TZ v2.0 maps onto this repo
+----------------------------------
+Agent mutates JSON only. Compiler (separate) emits Python that must satisfy
+the locked fit/score API and the locked evaluator.
+
+Hard constraints from this chat + TZ:
+  never change split r0, validate.py metrics, or test.py protocol
+  never use val/test labels for preprocessing or hard-negative sampling
+  no categorical features
+  output of compiled program is a score; TZ asks [0,1] probability after
+  calibration.temperature; evaluator only needs ranking (higher=binder)
+  CHANGE_INPUT must not remove the last active input (TZ 4.8)
+  PDB kind: ImmRep25 files here are complexes (A/B TCR, C peptide, D MHC),
+  so inputs.pdb.kind = "complex" is the factual default after extract
+  MaSIF sides already exist as tcr.npz (direct) and pmhc.npz (flipped)
+  sequence region CDR/FR only for tcr_alpha / tcr_beta; groove_a1a2 only mhc
+  protein_lm pretrained weights: fixed runner set only, no network
+
+Operator ids (one per call):
+  CHANGE_INPUT, CHANGE_SEQUENCE, CHANGE_STRUCTURE, CREATE_SURFACE,
+  CHANGE_INTERACTION, CHANGE_MODEL, CHANGE_TRAINING, CHANGE_AUGMENTATION,
+  CHANGE_OPTIMIZATION, CHANGE_CALIBRATION, NOOP
+  reject → "{OP}_REJECTED", parent JSON unchanged except meta.operator_applied
+
+
+4. Suggested implementation order (when starting operators)
+-----------------------------------------------------------
+1. JSON schema + pydantic (or equivalent) for TZ §3, including ensemble_members
+2. integrity (TZ §4) + repair (TZ §5) as pure functions, unit tests
+3. ten operators + NOOP + REJECTED (TZ §6), one field change per call
+4. compiler: genotype → Python module with entrypoint/fit/score
+   using only active inputs; skip inactive encoders.surface if no MaSIF
+5. wire GigaEvo: json_document program_format, mutation stage calls the
+   operator agent with scheduler-chosen id (TZ §9 can be a stub first)
+6. extract PDB/MaSIF so CHANGE_STRUCTURE / CREATE_SURFACE can actually run
+7. do not touch problems/pmhctcr/evaluate.py, split.py, splits/r0.json
+
+
+5. Open mapping notes (resolve at implementation, not by changing eval)
+----------------------------------------------------------------------
+TZ "peptide"  = table column epitope_seq / epitope_id
+TZ "mhc"      = mhca_seq (mhcb is dummy B2M)
+TZ "tcr_direct" / "pmhc_flipped" = masif tcr.npz vs pmhc.npz
+TZ score [0,1] vs current evaluator: ranking-only is enough; temperature
+  does not change AUC0.1 / AUCPR (TZ 6.10)
+Current GigaEvo seed is Python logistic, not JSON. First seed genotype
+  must compile to something that runs on train tables even before PDB/MaSIF
+  are extracted (sequence-only inputs).

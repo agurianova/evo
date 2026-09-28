@@ -1,0 +1,22 @@
+# @package memory.llm
+# Memory-subsystem LLM router — large Qwen instruct via LOCAL_LLM_PROXY.
+# Heavier card enrichment/dedup than gemini; `memory/llm=qwen_instruct`.
+_target_: gigaevo.llm.models.MultiModelRouter
+_convert_: all
+name: memory
+models:
+  - _target_: langchain_openai.ChatOpenAI
+    model: Qwen/Qwen3-235B-A22B-Instruct-2507
+    # This is a local LiteLLM route, not OpenRouter. Its key must be supplied
+    # explicitly by the launch environment.
+    api_key: ${oc.env:LITELLM_MASTER_KEY}
+    base_url: ${oc.env:LOCAL_LLM_PROXY}
+    temperature: 0.0
+    max_tokens: null
+probabilities:
+  - 1.0
+max_concurrent: 100
+writer: ${ref:writer}
+# auto: the Qwen vLLM proxy rejects forced tool_choice, so negotiate
+# json_schema -> function_calling -> json_mode and cache the winning method.
+structured_output_method: auto

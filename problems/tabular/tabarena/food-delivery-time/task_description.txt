@@ -1,0 +1,12 @@
+TASK — TABULAR REGRESSION (tabarena-food-delivery-time)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Delivery_person_Age numeric
+- [1] Delivery_person_Ratings numeric
+- [2] Restaurant_latitude numeric
+- [3] Restaurant_longitude numeric
+- [4] Delivery_location_latitude numeric
+- [5] Delivery_location_longitude numeric
+- [6] Delivery_person_ID categorical (integer code), 1313 levels: 0=AGRRES010DEL02 1=AGRRES010DEL03 2=AGRRES01DEL01 3=AGRRES01DEL02 4=AGRRES01DEL03 5=AGRRES02DEL01 ... 1312=VADRES20DEL03
+- [7] Type_of_order categorical (integer code), 4 levels: 0=Buffet  1=Drinks  2=Meal  3=Snack
+- [8] Type_of_vehicle categorical (integer code), 4 levels: 0=bicycle  1=electric_scooter  2=motorcycle  3=scooter

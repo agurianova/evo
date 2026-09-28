@@ -1,0 +1,265 @@
+\documentclass[10pt]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{parskip}
+\definecolor{good}{RGB}{20,120,60}
+\definecolor{warn}{RGB}{180,120,10}
+\definecolor{bad}{RGB}{170,30,30}
+\newcommand{\pass}{\textcolor{good}{\textbf{PASS}}}
+\newcommand{\watch}{\textcolor{warn}{\textbf{WATCH}}}
+
+\title{HoVer full7: ALL-IN Pair Closeout --- BD3D $\times$ Paired Gate $\times$ Paired Crediting\\
+\large Two replicate MEM/NOMEM pairs, prereg A1 verdict, MMR winner selection, TEST-split evaluation\\
+\normalsize Branch \texttt{memory-cold-probe-policy} research closeout. Every cross-run comparison carries a CI or significance test.}
+\author{GigaEvo autonomous run report}
+\date{2026-07-12}
+
+\begin{document}
+\sloppy
+\maketitle
+
+\section*{TL;DR}
+\begin{enumerate}
+\item \textbf{Prereg A1 verdict: \textcolor{warn}{NO-WIN}.}
+Best pooled winner P2 MEM top1 re-evaluates at
+$0.8229 \pm 0.0097$ (K=5, val)
+against the bar $>0.8298$; paired per-claim tests vs the two prior
+champions: vs MEM\_R1 diff $-0.0069$ (p=0.4976),
+vs NOV\_R2 diff $-0.0062$ (p=0.1304).
+Read: a \emph{statistical tie} with both prior champions --- every other ALL-IN
+winner re-evaluates significantly \emph{below} them. Prereg asymmetry:
+WIN $\Rightarrow$ genuine; NO-WIN $\not\Rightarrow$ worse.
+\item \textbf{The pair-2 memory arm produced the campaign-best program} (val
+0.8367 single-eval, 0.8229 $\pm$
+0.0097 corrected): it dominates the pooled 984-program
+cross-pair MMR (mean paired win-probability 0.996 vs the other 11 finalists) and
+scores \textbf{62.7\% hard} on the 300-claim TEST split
+--- +7.3 pts over the best
+no-memory winner and +15.9 pts over
+the seed. Previous Qwen-mutator campaigns finished at 56.7--59.0\%.
+\item \textbf{Memory verdict on val is split 1/1 across pairs} (pair 1: NOMEM wins
+MMR; pair 2: MEM wins decisively), so on validation means alone memory is not yet a
+proven default. But the memory machinery is now fully live (T5-W/T5-R crediting
+consumed, zero fallbacks) and both campaign-best programs across all HoVer
+campaigns to date came from memory arms.
+\item \textbf{All treatment gates passed in both pairs} (T1--T7 final sweeps;
+LIVE fails post-hoc only because PIDs exited). Known deviation: card injection rate
+ran hot (57.9\%/61.8\% vs the 30--55\% band); top-card reuse stayed under the
+60$\times$ bar (27$\times$/39$\times$).
+\item \textbf{Recommended chain-experiment defaults} (\S Defaults): vectorized
+problems (per-sample score vectors) + \texttt{algorithm=chains\_bd3d} +
+\texttt{archive\_selector=paired\_bootstrap} + noise-gated guided pipeline;
+memory ON with paired crediting as the exploratory default, subject to the
+injection-band caveat. Winner selection by paired-duel MMR, never single-eval rank.
+\end{enumerate}
+
+\section*{Setup and run log}
+Treatment bundle (``ALL-IN''): 3D MAP-Elites behavior space on chain-strategy axes
+(hop\_depth $\times$ passages\_fetched $\times$ instr\_chars, 150 cells,
+\texttt{chains\_bd3d}), paired-bootstrap archive acceptance on per-claim score
+vectors (challenger enters only if paired bootstrap beats the cell incumbent), and
+--- MEM arm only --- paired card crediting (per-sample gain\_se $\to$ posterior
+updates). Problem \texttt{chains/hover/full7\_vectorized} (300 fixed train
+claims, soft coverage fitness, per-claim vectors stored); mutator
+Qwen3-235B-Thinking; chain executor Qwen3-8B; 250 mutants per run;
+\texttt{num\_parents=1}.
+
+Launch timeline (2026-07-11/12): first launch crashed on a ref-resolver/dataclass
+bug (estimators must be plain classes; fixed + regression test + preflight);
+second launch aborted at the 1h hard gate by the watchdog; third launch = pair 1
+(TS 000307), clean finish; night queue auto-launched pair 2 (TS 071628), clean
+finish. Both pairs ran under a watchdog with a 1h hard gate and T+3h/T+6h sweeps.
+
+\section*{Prereg A1: winner re-evaluation and paired verdict}
+All four arm winners re-evaluated K=5 on the same fixed 300-claim val set with
+per-claim vectors captured (protocol identical to the eval-noise study; per-claim
+vector = mean over the K evals; Wilcoxon zero-split + 20k-resample bootstrap CI).
+
+\begin{table}[H]\centering
+\begin{tabular}{lcccc}
+\toprule
+Winner & in-run (1 eval) & re-eval mean $\pm$ CI95 & SD & curse \\
+\midrule
+P2\_MEM\_top1 & 0.8367 & 0.8229 $\pm$ 0.0097 & 0.0111 & +0.0138 \\
+P1\_NOMEM\_top1 & 0.8144 & 0.7900 $\pm$ 0.0053 & 0.0060 & +0.0244 \\
+P1\_MEM\_top1 & 0.8056 & 0.7942 $\pm$ 0.0046 & 0.0053 & +0.0113 \\
+P2\_NOMEM\_top1 & 0.7933 & 0.7831 $\pm$ 0.0057 & 0.0065 & +0.0102 \\
+\midrule
+MEM\_R1 (prior champ) & 0.8322 & 0.8298 $\pm$ 0.0077 & 0.0088 & --- \\
+NOV\_R2 (prior champ) & 0.8267 & 0.8291 $\pm$ 0.0063 & 0.0072 & --- \\
+\bottomrule
+\end{tabular}
+\caption{K=5 val re-evaluations. ``curse'' = in-run minus re-eval (winner's curse).}
+\end{table}
+
+\begin{table}[H]\centering
+\begin{tabular}{lcccc}
+\toprule
+Paired comparison (300 shared claims) & mean diff & bootstrap CI95 & Wilcoxon p & verdict \\
+\midrule
+P1 MEM top1 vs MEM R1 & -0.0356 & [-0.0482, -0.0231] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+P1 MEM top1 vs NOV R2 & -0.0349 & [-0.0491, -0.0202] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+P1 NOMEM top1 vs MEM R1 & -0.0398 & [-0.0556, -0.0242] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+P1 NOMEM top1 vs NOV R2 & -0.0391 & [-0.0527, -0.0256] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+P2 MEM top1 vs MEM R1 & -0.0069 & [-0.0178, +0.0038] & 0.4976 & ns \\
+P2 MEM top1 vs NOV R2 & -0.0062 & [-0.0182, +0.0058] & 0.1304 & ns \\
+P2 NOMEM top1 vs MEM R1 & -0.0467 & [-0.0622, -0.0320] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+P2 NOMEM top1 vs NOV R2 & -0.0460 & [-0.0636, -0.0291] & 0.0000 & \textcolor{good}{\textbf{SIG}} \\
+\bottomrule
+\end{tabular}
+\caption{Paired per-claim tests vs prior champions. SIG = CI excludes 0 AND p$<$.05.}
+\end{table}
+
+\textbf{A1 verdict: \textcolor{warn}{NO-WIN}} (best = P2 MEM top1,
+bar $>0.8298$: not met;
+significant vs both priors: no).
+The best ALL-IN winner is statistically indistinguishable from the prior champions
+on val while being the clear campaign best on held-out TEST --- the prereg
+asymmetry (NO-WIN $\not\Rightarrow$ worse) applies in full.
+
+\section*{MMR winner selection (paired-duel Bradley--Terry)}
+Single-eval fitness ranks are noise-dominated ($\sigma \approx 0.008$), so winners
+are selected by matchmaking rating: full pairwise P(A beats B) via paired bootstrap
+on stored per-claim vectors, Bradley--Terry fit, Elo display. Pooled over all four
+arms (984 eligible programs; \texttt{done}+\texttt{discarded} admitted since a
+gate rejection is one paired verdict vs one incumbent):
+
+\begin{table}[H]\centering
+\begin{tabular}{cccccc}
+\toprule
+rank & MMR & mean P(beat) & val fitness & arm & gen \\
+\midrule
+1 & 2405 & 0.996 & 0.8367 & MEM P2 & 162 \\
+2 & 1685 & 0.767 & 0.8144 & NOMEM P1 & 97 \\
+3 & 1457 & 0.514 & 0.8056 & NOMEM P1 & 238 \\
+4 & 1453 & 0.507 & 0.8056 & MEM P1 & 130 \\
+5 & 1430 & 0.476 & 0.8044 & MEM P2 & 255 \\
+6 & 1393 & 0.426 & 0.8033 & MEM P1 & 219 \\
+7 & 1376 & 0.403 & 0.8022 & NOMEM P1 & 132 \\
+8 & 1373 & 0.399 & 0.8022 & MEM P2 & 254 \\
+\bottomrule
+\end{tabular}
+\caption{Cross-pair pooled MMR, top 8 of 984. P2 MEM's winner is unambiguous.}
+\end{table}
+
+\section*{TEST-split results (held-out, hard metric)}
+300 held-out claims, K=5, hard = 1 only if \emph{all} gold articles are retrieved.
+
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+Program & val (stored) & TEST hard \% $\pm$ CI & TEST soft \\
+\midrule
+P2 MEM winner (MMR pick) & 0.8367 & 62.7 $\pm$ 1.9 & 0.8353 \\
+P2 NOMEM winner & 0.7933 & 55.4 $\pm$ 1.5 & 0.7998 \\
+P1 NOMEM winner (P1 MMR pick) & 0.8144 & 54.9 $\pm$ 1.1 & 0.8007 \\
+P1 MEM winner & 0.8056 & 54.7 $\pm$ 1.1 & 0.7982 \\
+Seed baseline & 0.7478 & 46.7 $\pm$ 1.0 & 0.7607 \\
+\bottomrule
+\end{tabular}
+\caption{TEST-split evaluation. Soft drops only $\sim$0.01 from val: clean generalization.}
+\end{table}
+
+External frame (same seed, same test protocol, single-shot prior evals): earlier
+campaigns finished at 44.0 $\to$ 67.3/68.0 (gemini-3.5-flash mutator, arms A/B) and
+48.3 $\to$ 59.0/56.7 (Qwen3-235B-Think mutator), all memory-free. The ALL-IN P2 MEM
+winner reaches 62.7 with the Qwen mutator --- above every prior Qwen arm, closing
+more than half the gap to the gemini arms. Mutator model remains the dominant
+untapped lever (see \S Next).
+
+\begin{figure}[H]\centering
+\includegraphics[width=0.92\textwidth]{allin_trajectories.png}
+\caption{Best-so-far val fitness (single-eval) per arm. P2 MEM's late jump at
+gen$\sim$162 is the campaign winner entering the archive.}
+\end{figure}
+
+\section*{What the winner evolved}
+Relative to the seed (retrieve $\to$ summarize $\to$ query $\to$ retrieve $\to$
+summarize $\to$ query $\to$ retrieve\_deep), the P2 MEM winner:
+(i) upgrades two of three retrievals to \texttt{retrieve\_deep} (k=10);
+(ii) deletes both lossy ``summarize'' steps, generating hop queries directly from
+raw passages; (iii) adds an explicit verification step (``output VERIFIED, or name
+the specific evidence gap'') whose output drives a targeted final
+\texttt{retrieve\_deep} --- a gap-filling retrieval that is nearly free when the
+claim is already covered. Structure: 4 tool calls / 3 LLM calls vs the seed's
+3 tool / 4 LLM.
+
+\section*{Treatment evidence (final sweeps, both pairs)}
+\begin{itemize}
+\item \textbf{T1 BD3D occupancy}: P1 33/38 cells (MEM/NOMEM), P2 41/27 --- vs 13
+cells in pre-BD3D campaigns. The winning arm (P2 MEM) had the largest archive.
+\item \textbf{T2 axis spread}: hop$\geq$3 share 21.1/18.4/25.1/4.0\% (P1M/P1N/P2M/P2N)
+vs 12.7\% control; passages\_fetched up to 40.
+\item \textbf{T3 vectors}: every scored program carries a coherent 300-length
+per-claim vector (0 missing, 0 incoherent).
+\item \textbf{T4 paired gate}: 231/233/248/237 paired decisions, \textbf{0 fallbacks};
+accept rates 19/28/37/19\%. The winning arm had the highest accept rate.
+\item \textbf{T5 crediting (MEM arms)}: 55/55 and 54/54 DIRECT events carry
+gain\_se$>$0; replay shows posteriors actually move (max $|\Delta$posterior$|$
+0.51/0.45). Crediting is live and consumed, not decorative.
+\item \textbf{T6 memory health}: injection 57.9\%/61.8\% --- \watch{} above the
+30--55\% band; top-card reuse 27$\times$/39$\times$ (bar $<$60).
+\item \textbf{T7 NOMEM purity}: zero memory signals in both NOMEM arms.
+\end{itemize}
+
+\section*{Issues log}
+\begin{enumerate}
+\item Watchdog T5-W re-check regex never matched (\texttt{"T5-W.*WARN"} vs actual
+\texttt{"[WARN] T5-W"}); the 2h re-check silently skipped in both pairs. Benign here
+(T5-W passed by T+6h). Fixed post-run; sweeps now also echo to the log.
+\item Outbound internet died mid-campaign: run-finish Telegram messages were lost
+(delivered later via a retry queue) and the first A1 re-eval launch hung ---
+ambient Squid proxy env + internal LLM IP not in NO\_PROXY (known trap; the launcher
+clears proxies but ad-hoc tools must too). Restarted proxy-clean.
+\item Ref-resolver/dataclass bug (estimator configs must be plain classes) crashed
+the first launch; even the default point path was broken. Fixed with regression
+test + launcher preflight.
+\item Card injection rate above prereg band in both MEM runs (57.9/61.8\% vs
+30--55\%): the shortlist almost always has a card to offer at 250-mutant scale.
+Follow-up knob if dilution is suspected: injection probability cap.
+\item \texttt{python3 script.py} puts the script dir (not repo root) on
+\texttt{sys.path}: two eval scripts crashed on import until given an explicit
+repo-root insert.
+\end{enumerate}
+
+\section*{Defaults decision for chain experiments}
+Evidence-backed recommendation (to be baked into \texttt{problems/chains/README.md}
+as the canonical recipe):
+\begin{itemize}
+\item \textbf{Problem}: vectorized variants (\texttt{full7\_vectorized}-style
+per-claim vectors). Enables the paired gate, MMR selection, and paired crediting;
+zero incoherent vectors across 984 programs.
+\item \textbf{Algorithm}: \texttt{chains\_bd3d} + \texttt{enable\_chain\_structural\_metrics=true}
++ \texttt{program\_format=json\_document}. 27--41 occupied cells vs 13 pre-BD3D;
+produced the campaign winner.
+\item \textbf{Acceptance}: \texttt{archive\_selector=paired\_bootstrap}. 949 paired
+decisions, 0 fallbacks; kills single-eval noise promotions ($\sigma \approx 0.008$).
+\item \textbf{Pipeline}: \texttt{guided\_noise} (NOMEM) / \texttt{memory\_guided\_noise}
++ \texttt{memory=full memory/write=live memory/crediting=paired} (MEM). Memory ON is
+the recommended exploratory default: split 1/1 on val MMR but campaign-best on TEST
+by +7.3 pts, with crediting verified live; keep the no-memory arm as the control in
+any A/B.
+\item \textbf{Selection \& eval}: winner by pooled MMR (paired duels), never
+single-eval rank; K=5 re-eval with vectors for any headline number; TEST-split hard
+metric for external claims; seed anchor evaluated under the same protocol.
+\item \textbf{Ops}: mirror the ALL-IN launcher: model smoke checks, treatment
+self-check greps on the composed config, watchdog with 1h hard gate, run-end
+automation (MMR + test eval), Telegram with local log echo.
+\end{itemize}
+
+\section*{Next research}
+Mutator-model lever: the gemini-3.5-flash arms reached 67.3/68.0 TEST hard with
+\emph{no} memory and a 1D archive --- +4.6 pts above our best ($\approx$2--3
+combined SE). Proposal: rerun the
+ALL-IN recipe with gemini-3.5-flash as mutator (all else identical, MEM+NOMEM pair),
+target bar = Part I winner re-evaluated under the K=5 protocol. Prediction: if the
+ALL-IN machinery composes with the stronger mutator, the MEM arm should beat 68.0;
+if it lands at $\sim$68 the machinery is mutator-dominated; if below, the recipe
+interacts negatively with strong mutators. Full prereg with causal chain and
+prediction table to follow before launch.
+
+\end{document}

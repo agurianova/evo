@@ -1,0 +1,26 @@
+# @package _global_
+# Final pMHC-TCR python_patch run: four expert hypotheses (toggleable) and
+# pmhc_tcr_interaction × compute_tier MAP-Elites (6×6).
+
+defaults:
+  - /experiment/pmhctcr
+  - /expert_prompt: default
+  - override /mutation: python_patch
+  - override /algorithm: pmhctcr_python_final_2d
+  - override /pipeline: guided
+  - override /memory: none
+  - _self_
+
+loader:
+  pattern: python_patch_seed.py
+
+prompts:
+  dir: ${problem.dir}/prompts_python_patch_final
+
+problem_context:
+  task_description_file: task_description_final.txt
+  expert_hypotheses_enabled: ${expert_prompt.enabled}
+
+pipeline_builder:
+  _target_: problems.pmhctcr.pipeline.PmhctcrGuidedPipelineBuilder
+  validator_timeout: ${validator_timeout}

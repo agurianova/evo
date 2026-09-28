@@ -1,0 +1,9 @@
+# @package _global_
+
+program_loader:
+  _target_: problems.tab_wpf.seed_loader.TabWpfSeedLoader
+  dataset: ${problem.dataset}
+  problem_dir: ${problem.dir}
+  evaluation_mode: ${problem.evaluation_mode}
+  task_bank: ${problem.task_bank}
+  task_split: ${problem.task_split}

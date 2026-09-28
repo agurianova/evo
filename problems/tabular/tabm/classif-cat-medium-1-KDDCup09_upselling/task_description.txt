@@ -1,0 +1,19 @@
+TASK — TABULAR BINARY CLASSIFICATION (classif-cat-medium-1-KDDCup09_upselling)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-33]     numeric
+- [34]       binary (0/1)
+- [35]       categorical (integer code), 4 levels: 0=0 1=1 2=2 3=3
+- [36]       categorical (integer code), 3 levels: 0=0 1=1 2=3
+- [37]       categorical (integer code), 2 levels: 0=1 1=2
+- [38]       categorical (integer code), 4 levels: 0=0 1=1 2=2 3=5
+- [39]       categorical (integer code), 4 levels: 0=0 1=1 2=2 3=3
+- [40]       categorical (integer code), 12 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6 7=7 8=8 9=9 10=10 11=13
+- [41]       categorical (integer code), 3 levels: 0=0 1=1 2=2
+- [42]       categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=5
+- [43]       categorical (integer code), 3 levels: 0=0 1=1 2=2
+- [44]       categorical (integer code), 7 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6
+- [45]       categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4
+- [46]       categorical (integer code), 4 levels: 0=0 1=1 2=2 3=3
+- [47]       categorical (integer code), 7 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6
+- [48]       categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4

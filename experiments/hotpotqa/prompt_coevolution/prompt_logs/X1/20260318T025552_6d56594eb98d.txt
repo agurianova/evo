@@ -1,0 +1,479 @@
+=== PROMPT DUMP 20260318T025552 ===
+prompt_id: 6d56594eb98d8be9
+
+=== SYSTEM PROMPT ===
+You optimize HotpotQA chains.
+
+OBJECTIVE: CHAIN EVOLUTION
+You are evolving a multi-step reasoning chain defined with structured fields.
+Each LLM step is specified by semantic fields (aim, stage_action, etc.) that are
+automatically assembled into prompts — you do not write raw prompt text. You control
+the structured-field content and the chain-level system_prompt.
+
+Consider the next guidelines:
+1) Chain optimization is a high-dimensional, experimental design problem. Each LLM step's
+   structured fields may combine:
+   - Reasoning scaffolds: explicit step-by-step thinking, sub-problem decomposition
+   - Role & context framing: role definition, domain setup, goal specification, success criteria
+   - Instruction precision: task boundaries, structural directives
+   - In-context exemplars: input-output examples, pattern demonstrations
+   - Constraints: output schema, formatting rules
+   Additionally, multi-step chains require attention to:
+   - Step coordination: each step should produce output shaped for its downstream consumers
+   - Information flow: pass only relevant information forward to avoid context dilution
+   - Role specialization: each step should have a clear, focused responsibility
+2) Structured fields of LLM steps:
+   - "aim" (REQUIRED, non-empty): Primary objective of this step
+   - "stage_action" (REQUIRED, non-empty): Specific action to perform
+   - "reasoning_questions" (optional): Key questions to answer
+   - "example_reasoning" (optional): Example of expert reasoning
+   These fields are assembled into a full LLM prompt for each step. The assembly
+   order (top to bottom):
+
+     [If system_prompt is non-empty]
+     System Instructions:
+     {system_prompt}
+
+     Data:
+     {outer_context}              ← initial user input
+
+     [If step has dependencies]
+     Previous steps:
+     Step N. Title
+     Result: <output>
+     ...
+     Based on the results of previous steps, perform the following task:
+     Step {number}. {title}
+     Objective: {aim}
+     Task: {stage_action}
+     Questions: {reasoning_questions}
+     Example reasoning: {example_reasoning}
+
+   Key points:
+   - system_prompt is shared — prepended to every LLM step
+   - outer_context wraps every LLM step as "Data:\n{outer_context}"
+   - Dependencies list controls which prior step outputs are visible
+3) Implementation details:
+   - entrypoint() returns a dict with "system_prompt" (str, may be empty) and "steps" (list of dicts)
+   - Each step dict has metadata fields: number, title, step_type, dependencies
+   - LLM steps carry the four structured fields above; tool steps carry step_config
+   - Tool steps use $-reference syntax in input_mapping:
+       $outer_context — the original sample context string
+       $history[-1] — output of the immediately preceding step
+       $history[N] — output of step at index N (0-based)
+
+STEP TYPES
+The chain supports two step types:
+- "llm": LLM reasoning step with structured fields (aim, stage_action, reasoning_questions,
+  example_reasoning). The LLM receives the assembled prompt and produces a text response.
+- "tool": Tool execution step with step_config. Currently available tool:
+    "retrieve" — BM25 retrieval over Wikipedia abstracts. Returns top-k passages
+    formatted as "[i] Title | sentence1 sentence2 ...".
+    Usage in step_config: {"tool_name": "retrieve", "input_mapping": {"query": "$reference"}}
+    Where $reference is one of: $outer_context, $history[-1], $history[N]
+
+EVOLUTION MODE — STATIC
+The chain topology (step count, types, dependencies) is fixed. Only the structured field
+content of non-frozen LLM steps and the chain-level system_prompt are evolvable.
+Frozen steps must match the baseline exactly and cannot be modified.
+Each step dict additionally includes a "frozen" metadata field (True/False).
+
+TASK DEFINITION — MULTI-HOP QUESTION ANSWERING
+
+Challenge: Design a chain that maximizes token-level F1 accuracy on multi-hop reasoning questions.
+
+OBJECTIVE
+Return a chain specification guiding the downstream LLM such that:
+ 1) All chain steps are valid and well-defined
+ 2) The chain guides the LLM through multi-hop reasoning using retrieval and synthesis
+ 3) The final step returns a clear, extractable answer in "Answer: <answer>" format
+ 4) Maximizes token-level F1 accuracy between predicted and gold answers (SQuAD-style)
+
+FITNESS METRIC: Token-level F1 (not Exact Match). Partial credit is awarded for predictions
+that share tokens with the gold answer — e.g., predicting "New York City" for gold "New York"
+scores F1=0.80 rather than 0. Focus on producing answers that contain the correct content
+tokens, not necessarily identical surface forms.
+
+Output: 'Answer: <answer>' (extractable by regex) | Goal: Token-level F1 > 0.7
+
+PIPELINE COMPONENTS
+- LLM: Model with basic multi-hop reasoning capabilities
+- Retrieval: BM25 over Wikipedia abstracts via the "retrieve" tool; returns top-k passages
+  formatted as "[i] Title | sentence1 sentence2 ..."
+
+CHAIN STRUCTURE — FIXED 6-STEP TOPOLOGY
+
+Step 1 (TOOL) — "Retrieve first-hop passages"
+  Type: tool | Dependencies: [] | Frozen: Yes
+  Purpose: Retrieve Wikipedia passages using the question as query.
+  Config: tool_name="retrieve", input_mapping={"query": "$outer_context"}
+
+Step 2 (LLM) — "Summarize first-hop passages"
+  Type: llm | Dependencies: [1] | Frozen: No
+  Purpose: Extract key facts from the retrieved passages relevant to the question.
+
+Step 3 (LLM) — "Generate second-hop query"
+  Type: llm | Dependencies: [2] | Frozen: No
+  Purpose: Identify missing information and generate a focused second-hop search query.
+
+Step 4 (TOOL) — "Retrieve second-hop passages"
+  Type: tool | Dependencies: [3] | Frozen: Yes
+  Purpose: Retrieve additional passages using the generated query.
+  Config: tool_name="retrieve", input_mapping={"query": "$history[-1]"}
+
+Step 5 (LLM) — "Combine evidence"
+  Type: llm | Dependencies: [2, 4] | Frozen: No
+  Purpose: Integrate first-hop summary with second-hop passages into unified evidence.
+
+Step 6 (LLM) — "Final answer"
+  Type: llm | Dependencies: [2, 5] | Frozen: No
+  Purpose: Synthesize all evidence and produce the final answer.
+
+GENOME FORMAT
+entrypoint() must return a dict:
+{
+    "system_prompt": "string — shared instruction prepended to every LLM step",
+    "steps": [
+        {   # Step 1 (tool — frozen, must match exactly)
+            "number": 1,
+            "title": "Retrieve first-hop passages",
+            "step_type": "tool",
+            "dependencies": [],
+            "frozen": True,
+            "step_config": {
+                "tool_name": "retrieve",
+                "input_mapping": {"query": "$outer_context"},
+            },
+        },
+        {   # Step 2 (LLM)
+            "number": 2,
+            "title": "Summarize first-hop passages",
+            "step_type": "llm",
+            "aim": "required — step objective",
+            "stage_action": "required — what the LLM should do",
+            "reasoning_questions": "optional — guiding questions",
+            "example_reasoning": "optional — example thought process",
+            "dependencies": [1],
+            "frozen": False,
+        },
+        ...  # Steps 3-6 follow the same pattern
+    ],
+}
+
+CONSTRAINTS
+- LLM steps require non-empty "aim" and "stage_action" fields
+- Dependencies must reference only earlier steps (by number)
+- No dependency cycles
+- The final LLM step must guide the LLM to output "Answer: <answer>"
+- Steps list must have exactly 6 entries
+- Step types and dependencies must match the fixed topology
+- Frozen steps (1 and 4) must match the baseline exactly
+
+FAILURE MODES
+- Missing or empty required fields (aim, stage_action for LLM steps)
+- Dependency cycles or references to non-existent/later steps
+- Final step not producing extractable "Answer: ..." output
+- Wrong number of steps or type/deps mismatch with fixed topology
+- Frozen step content differs from baseline
+
+OUTPUT FORMAT
+Implement `def entrypoint()` that returns:
+- A dict with "system_prompt" (str) and "steps" (list of step dicts)
+- Each step dict has metadata fields (number, title, step_type, dependencies)
+- LLM steps have structured fields (aim, stage_action, reasoning_questions, example_reasoning)
+- LLM return format for final step: 'Answer: <answer>' (extractable by regex)
+- Each step dict includes "frozen" field (True/False)
+
+TASK HINTS
+- Keep prompts focused on each step's specific role
+- Query generation steps should instruct the LLM to output only the search query, avoiding extraneous text that confuses the retriever
+
+METRICS: - fitness: Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection. (↑ better; [0.0, 1.0] range)
+- avg_extraction_failures: Average fraction of samples where answer extraction failed (↓ better; [0.0, 1.0] range)
+- is_valid: Whether the program is valid (1 valid, 0 invalid) (↑ better; [0.0, 1.0] range)
+
+CRITICAL:
+• Step 3: ONLY bare search terms (BM25 input) → e.g., 'Marie Curie nationality'
+• system_prompt: ≤20 words (shared across 4 steps)
+• Step 5: MUST consolidate evidence for step 6
+
+DIAGNOSE FAILURES:
+• MISSING gold docs? → FIX step 3 (retrieval)
+• Wrong answer with good evidence? → FIX steps 5-6 (reasoning)
+
+=== USER PROMPT ===
+Mutate parent program using these evidence-based rules:
+
+=== Parent 1 ===
+```python
+def entrypoint():
+    return {
+        "system_prompt": "Maximize token-level F1. Use exact evidence phrases. No paraphrasing.",
+        "steps": [
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+                "frozen": True,
+            },
+            {
+                "number": 2,
+                "title": "Summarize key facts from passages.",
+                "step_type": "llm",
+                "aim": "Identify and output verbatim the sentences from the passages that contain information directly relevant to the question.",
+                "stage_action": "Output only the verbatim sentences from the passages that answer the question or provide essential context. Do not rephrase, summarize, or add any text.",
+                "reasoning_questions": "Which sentences in the passages directly address the question? Which sentences provide essential context for answering the question?",
+                "example_reasoning": (
+                    "Example:\n"
+                    "Question: Which documentary film was released first, 'Seal Island' or 'Paper Clips'?\n"
+                    "Passages: [1] Paper Clips | The documentary 'Paper Clips' was released in 2004. [2] Seal Island | Seal Island is a 1948 documentary film.\n"
+                    "Output:\n"
+                    "The documentary 'Paper Clips' was released in 2004.\n"
+                    "Seal Island is a 1948 documentary film."
+                ),
+                "dependencies": [1],
+                "frozen": False,
+            },
+            {
+                "number": 3,
+                "title": "Generate second-hop query.",
+                "step_type": "llm",
+                "aim": "Identify the specific missing information required to answer the question and generate a minimal, entity-focused search query.",
+                "stage_action": (
+                    "Based on the summary, determine what additional evidence is needed to "
+                    "answer the question? Write a concise search query to find the missing evidence.\n"
+                    "Provide ONLY the search query, no additional text."
+                ),
+                "reasoning_questions": "What specific information is missing? Which entity or attribute should the query target?",
+                "example_reasoning": (
+                    "Example 1:\n"
+                    "Summary: The documentary 'Paper Clips' was released in 2004. Seal Island is a 1948 documentary film.\n"
+                    "Query: Seal Island year\n\n"
+                    "Example 2:\n"
+                    "Summary: Belgrave Heights Christian School in the Dandenong Ranges. Dandenong Ranges highest mountain is Mount Dandenong.\n"
+                    "Query: Mount Dandenong height\n\n"
+                    "Example 3:\n"
+                    "Summary: Frank Sinatra founder of Reprise Records.\n"
+                    "Query: Frank Sinatra debut album"
+                ),
+                "dependencies": [2],
+                "frozen": False,
+            },
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+                "frozen": True,
+            },
+            {
+                "number": 5,
+                "title": "Combine evidence",
+                "step_type": "llm",
+                "aim": "List all evidence from both hops verbatim without any interpretation or resolution of contradictions.",
+                "stage_action": (
+                    "Present the second-hop passages exactly as retrieved, followed by the first-hop summary. "
+                    "Do not alter any text."
+                ),
+                "reasoning_questions": "What evidence is provided by the second-hop passages? What evidence is provided by the first-hop summary? List every piece of evidence verbatim.",
+                "example_reasoning": (
+                    "Example:\n"
+                    "First-hop summary: The documentary 'Paper Clips' was released in 2004.\n"
+                    "                 Seal Island is a 1948 documentary film.\n"
+                    "Second-hop passages: [1] Seal Island film | Seal Island was released in 1948.\n"
+                    "Output:\n"
+                    "[1] Seal Island film | Seal Island was released in 1948.\n"
+                    "The documentary 'Paper Clips' was released in 2004.\n"
+                    "Seal Island is a 1948 documentary film."
+                ),
+                "dependencies": [2, 4],
+                "frozen": False,
+            },
+            {
+                "number": 6,
+                "title": "Final answer",
+                "step_type": "llm",
+                "aim": "Produce a minimal final answer with maximum token overlap by using exact phrases from evidence.",
+                "stage_action": (
+                    "Based on the combined evidence, provide the minimal answer that directly answers the question. "
+                    "Use exact phrases from the evidence. Output in the exact format: Answer: <answer> with no extra text."
+                ),
+                "reasoning_questions": "Which exact phrase in the evidence states the answer? How can the answer be phrased to match the expected token set with minimal extra words?",
+                "example_reasoning": (
+                    "Example:\n"
+                    "Evidence:\n"
+                    "  [1] Seal Island film | Seal Island was released in 1948.\n"
+                    "  The documentary 'Paper Clips' was released in 2004.\n"
+                    "  Seal Island is a 1948 documentary film.\n"
+                    "Question: Which documentary film was released first, 'Seal Island' or 'Paper Clips'?\n"
+                    "Step-by-step reasoning:\n"
+                    "  1. Seal Island release year: 1948 (from evidence)\n"
+                    "  2. Paper Clips release year: 2004 (from evidence)\n"
+                    "  3. 1948 is earlier than 2004, so Seal Island was released first.\n"
+                    "  4. The evidence states 'Seal Island' as the film name, so the answer is 'Seal Island'.\n"
+                    "Answer: Seal Island"
+                ),
+                "dependencies": [2, 5],
+                "frozen": False,
+            },
+        ],
+    }
+```
+
+## Program Metrics
+
+- fitness : 0.513 (Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection.; ↑ better)
+- avg_extraction_failures : 0.005 (Average fraction of samples where answer extraction failed; ↓ better)
+- is_valid : 1 (Whether the program is valid (1 valid, 0 invalid); ↑ better)
+
+---
+
+## Program Insights
+
+- **[paraphrasing_policy]**[harmful]**[high]**: System_prompt forbids paraphrasing but token F1 requires minimal extraction (e.g., 'Seal Island' from a sentence). Verbatim output of long sentences reduces token overlap. Change system_prompt to allow minimal exact phrases.
+- **[extraction_granularity]**[harmful]**[high]**: Step 2 outputs entire sentences (e.g., 'Seal Island is a 1948 documentary film') but answer is 'Seal Island'. Long sentences reduce Step 6's token overlap. Modify Step 2 to extract minimal relevant phrases only.
+- **[fact_extraction]**[harmful]**[high]**: Step 2 extracts isolated sentences but comparison questions require multiple facts (e.g., two release years). Without both, Step 6 cannot compare. Update Step 2 to extract all question-relevant facts with entities.
+- **[evidence_filtering]**[harmful]**[high]**: Step 5 dumps all evidence verbatim without filtering. Redundant/irrelevant evidence confuses Step 6. Change Step 5 to select only evidence containing answer entities or key attributes.
+- **[query_specificity]**[harmful]**[medium]**: Step 3 generates vague queries (e.g., 'Seal Island year') leading to ambiguous retrieval. Improve by including context (e.g., 'Seal Island release year compared to Paper Clips') for disambiguation.
+- **[output_format_inconsistency]**[harmful]**[medium]**: Step 6 example_reasoning shows step-by-step reasoning but stage_action forbids extra text. LLM may output reasoning, diluting token match. Remove reasoning from example to enforce minimal output.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: 63f37667 → bf1bf1be
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.553 | 0.513 | -0.039 | -7.1% | worsened ★ |
+| avg_extraction_failures | ↓ better | 0.002 | 0.005 | +0.003 | >+100.0% | worsened |
+| is_valid | ↑ better | 1 | 1 | +0 | +0.0% | no change |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,8 +1,7 @@) Replaced flexible 'use exact phrases when possible' with absolute 'No paraphrasing' in system prompt, causing failures when evidence lacked exact matches; explains +100% extraction failures and -0.039 F1.
+  - **[exploration]**: (@@ -14,34 +13,29 @@) Step 2 switched to verbatim sentence output instead of structured entity-attribute extraction, introducing noise that diluted downstream query generation and evidence synthesis quality.
+  - **[refinement]**: (@@ -50,21 +44,18 @@) Step 3 query generation tightened to 'minimal' queries (e.g., 'Seal Island year'), reducing BM25 precision by omitting critical context like 'film release year'.
+  - **[refinement]**: (@@ -89,38 +79,40 @@) Step 6's 'minimal answer' constraint without structured evidence caused extraction failures to increase by >100%; lesson: minimality requires clean upstream evidence to maintain output format.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 4 | **Total Programs**: 28
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 1 | 0.619 | 0.619 | 0.619 | 100.0% | 1 | 6.00 | 6 |
+| 2 | 0.661 | 0.577 | 0.497 | 100.0% | 6 | 1.00 | 3 |
+| 3 | 0.610 | 0.580 | 0.553 | 100.0% | 6 | 1.83 | 4 |
+| 4 ← | 0.693 | 0.537 | 0.441 | 90.9% | 11 | 0.36 | 2 |
+| 5 | 0.634 | 0.517 | 0.417 | 75.0% | 4 | 0.00 | 0 |
+
+---
+
+## Failure Analysis (10 of 399 failure(s) randomly sampled)
+
+### Case 1
+**Question**: Mark Huffam was a producer on a spy comedy film parodying what secret agent?
+**Expected**: James Bond
+**Predicted**: James Bond secret agent genre
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "Mark Huffam"
+
+### Case 2
+**Question**: Great Limber is situated 8 miles east from a town with how many households according to the 2001 UK census ?
+**Expected**: 2,213
+**Predicted**: in 2,213 households (2001 UK census)
+**Hop 1 retrieval** (1/2 gold): MISSING — "Brigg"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Great Limber"
+
+### Case 3
+**Question**: What year was the football player drafted that Nick Collin intercepted in Super Bowl XLV?
+**Expected**: 2004
+**Predicted**: second round of the 2005 NFL Draft
+**Hop 1 retrieval** (1/2 gold): MISSING — "Ben Roethlisberger"
+**Hop 2 retrieval** (2/2 gold): ✓ all 2 retrieved
+
+### Case 4
+**Question**: What kind of persona does the artist who released Special Herbs, Vols. 4, 5 & 6 adopt?
+**Expected**: super villain
+**Predicted**: under the Metal Fingers moniker
+**Hop 1 retrieval** (0/2 gold): MISSING — "MF Doom", "Special Herbs, Vols. 4, 5 &amp; 6"
+**Hop 2 retrieval** (0/2 gold): MISSING — "MF Doom", "Special Herbs, Vols. 4, 5 &amp; 6"
+
+### Case 5
+**Question**: Avenger is a 2006 film starring an actor who played what character in "The Big Lebowski"?
+**Expected**: The Stranger
+**Predicted**: Jeffrey "The Dude" Lebowski
+**Hop 1 retrieval** (0/2 gold): MISSING — "Avenger (film)", "Sam Elliott"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Avenger (film)", "Sam Elliott"
+
+### Case 6
+**Question**: A Danish film director directed a film based on a memoir of a British journalist that stars who?
+**Expected**: Carey Mulligan
+**Predicted**: It stars Carey Mulligan as Jenny, a bright schoolgirl, and Peter Sarsgaard as David, the charming con man who seduces her.
+**Hop 1 retrieval** (1/2 gold): MISSING — "Lone Scherfig"
+**Hop 2 retrieval** (0/2 gold): MISSING — "An Education", "Lone Scherfig"
+
+### Case 7
+**Question**: Which singer has been part of more bands, Richard Ashcroft or James Bourne?
+**Expected**: James Elliot Bourne
+**Predicted**: James Elliot Bourne (born 13 September 1983 in Rochford, Essex, England) is an English singer-songwriter and co-founder of pop rock bands Busted and Son of Dork as well as a solo electronic project, Future Boy. From 2013-2015 he was a member of supergroup McBusted, which consisted of himself, Busted bandmate Matt Willis, and McFly.
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (1/2 gold): MISSING — "James Bourne"
+
+### Case 8
+**Question**: John D'Leo (born July 8, 1995) is an American actor, he is known for his role in which 2013 crime comedy film, directed by Luc Besson, starring Robert De Niro, it follows a Mafia family in the witness protection program who want to change their lives?
+**Expected**: The Family
+**Predicted**: The Family (released as Malavita and Cosa Nostra in some countries)
+**Hop 1 retrieval** (2/2 gold): ✓ all 2 retrieved
+**Hop 2 retrieval** (0/2 gold): MISSING — "John D'Leo", "The Family (2013 film)"
+
+### Case 9
+**Question**: Which university has more alternate names, Colorado State University or Alexandria University?
+**Expected**: Colorado State University
+**Predicted**: Alexandria University
+**Hop 1 retrieval** (1/2 gold): MISSING — "Colorado State University"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Alexandria University"
+
+### Case 10
+**Question**: Which biblical figure is engraved upon the gem named for the son of King Lohair I?
+**Expected**: Susanna
+**Predicted**: Phrygillus
+**Hop 1 retrieval** (0/2 gold): MISSING — "Lothair Crystal", "Lotharingia"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Lothair Crystal", "Lotharingia"
+
+_Use these failure cases to identify systematic weaknesses. MISSING retrieval entries indicate the BM25 query at that hop failed to surface key supporting documents — consider improving the query generation prompt for that step. Cases where retrieval succeeded but prediction was still wrong suggest reasoning or answer extraction issues._
+
+
+1. STEP 3 MANDATE: Output ONLY BM25 query string (e.g., "Eiffel Tower height").
+   - GOOD: Entity+attribute ("Marie Curie Nobel Prize year")
+   - BAD: Full sentences ("What year did Marie Curie win the Nobel Prize?")
+
+2. FAILURE ANALYSIS RESPONSE:
+   - MISSING entries → Improve step 3 query generation
+   - Reasoning errors → Improve steps 5-6 evidence synthesis
+
+3. INSIGHTS USAGE:
+   - 'harmful' patterns: REMOVE
+   - 'beneficial' patterns: PRESERVE/EXTEND
+   - 'fragile' patterns: ADD robustness
+   - Explicitly state how each insight was addressed
+
+Return JSON with:
+- "archetype": Selected evolutionary approach
+- "justification": 2-3 sentences linking insights to changes
+- "insights_used": Verbatim insight strings acted upon
+- "code": Complete Python program (raw code only)

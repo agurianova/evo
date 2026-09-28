@@ -1,0 +1,15 @@
+TASK — TABULAR REGRESSION (tabarena-wine-quality)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] fixed_acidity numeric
+- [1] volatile_acidity numeric
+- [2] citric_acid numeric
+- [3] residual_sugar numeric
+- [4] chlorides   numeric
+- [5] free_sulfur_dioxide numeric
+- [6] total_sulfur_dioxide numeric
+- [7] density     numeric
+- [8] pH          numeric
+- [9] sulphates   numeric
+- [10] alcohol     numeric
+- [11] wine_color  categorical (integer code), 2 levels: 0=red 1=white

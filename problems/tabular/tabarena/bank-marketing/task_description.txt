@@ -1,0 +1,16 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-bank-marketing)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] age         numeric
+- [1] balance     numeric
+- [2] campaign    numeric
+- [3] pdays       numeric
+- [4] previous    numeric
+- [5] job         categorical (integer code), 12 levels: 0=admin. 1=blue-collar 2=entrepreneur 3=housemaid 4=management 5=retired 6=self-employed 7=services 8=student 9=technician 10=unemployed 11=unknown
+- [6] marital     categorical (integer code), 3 levels: 0=divorced 1=married 2=single
+- [7] education   categorical (integer code), 4 levels: 0=primary 1=secondary 2=tertiary 3=unknown
+- [8] default     categorical (integer code), 2 levels: 0=no 1=yes
+- [9] housing     categorical (integer code), 2 levels: 0=no 1=yes
+- [10] loan        categorical (integer code), 2 levels: 0=no 1=yes
+- [11] contact     categorical (integer code), 3 levels: 0=cellular 1=telephone 2=unknown
+- [12] poutcome    categorical (integer code), 4 levels: 0=failure 1=other 2=success 3=unknown

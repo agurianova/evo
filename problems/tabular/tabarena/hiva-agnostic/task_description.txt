@@ -1,0 +1,4 @@
+TASK — TABULAR MULTICLASS CLASSIFICATION (tabarena-hiva-agnostic, 3 classes)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-1616] molecule_structure_property_1 … molecule_structure_property_1617 — categorical (integer code), 2 levels: 0=0 1=1 (1617 columns)

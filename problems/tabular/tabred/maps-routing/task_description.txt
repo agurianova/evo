@@ -1,0 +1,6 @@
+TASK — TABULAR REGRESSION (maps-routing)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-983]    numeric
+- [984]       categorical (integer code), 8 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6 7=7
+- [985]       categorical (integer code), 8 levels: 0=0 1=1 2=2 3=3 4=4 5=5 6=6 7=7

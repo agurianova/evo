@@ -1,0 +1,339 @@
+schema_version: 2
+contract:
+  identity:
+    name: heilbron/adversarial-repro-v1
+    task: heilbron
+    branch: exp/heilbron/adversarial-repro-v1
+    pr_number: 211
+    tracking_issue: null
+    prereg_commit: 562a1210
+  problem:
+    has_test_set: false
+    test_set_path: null
+    test_set_sha256: null
+    max_val_test_gap: null
+    fitness_type: continuous
+    metric_name: actual_fitness
+  config:
+    task_group: heilbron
+    pipeline: heilbron_repro_v1
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 3000
+    dag_timeout: 7200
+    mutation_mode: rewrite
+    significant_change: 0.01
+    shared_overrides:
+      evolution: steady_state
+      stopper: max_generations
+      inner_iterations: 1
+      n_opponents: 1
+      source_prompt_k: 1
+      archive_reeval: false
+      # Opponent result production — per-run override (see runs[].extra_overrides):
+      #   G runs (role=constructor): "exec"  — D opponents return closures; must re-exec
+      #   D runs (role=improver):    "cached"— G opponents return static ndarrays; safe to cache
+      opponent_result_mode_default: exec
+    pinned:
+      pre_step_hook.drift_cap: 100000
+      inner_iterations: 1
+      n_opponents: 1
+      source_prompt_k: 1
+      pre_step_hook.sync_every_n_epochs: 1
+      pipeline_builder.archive_reeval: false
+      num_parents: 1
+      max_elites_per_generation: 8
+      max_mutations_per_generation: 8
+      mutation_mode: rewrite
+      max_generations: 200
+  runs:
+  - label: A1_G
+    db: 1
+    prefix: heilbron_repro_v1/pop_a
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_a
+    condition: 'Arm A (Composition): Constructor, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040531
+    log_path: run_A1_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=2
+    - opponent_redis_prefix=heilbron_repro_v1/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - post_step_hook=\${composition_injection_hook}
+    - opponent_result_mode=exec
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+  - label: A1_D
+    db: 2
+    prefix: heilbron_repro_v1/pop_b
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_b
+    condition: 'Arm A (Composition): Improver, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040532
+    log_path: run_A1_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=1
+    - opponent_redis_prefix=heilbron_repro_v1/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - opponent_result_mode=cached
+    role: improver
+  - label: A2_G
+    db: 3
+    prefix: heilbron_repro_v1/pop_a
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_a
+    condition: 'Arm A (Composition): Constructor, pair 2'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040533
+    log_path: run_A2_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=4
+    - opponent_redis_prefix=heilbron_repro_v1/pop_b
+    - feedback_mode=composition
+    - population_role=constructor
+    - post_step_hook=\${composition_injection_hook}
+    - opponent_result_mode=exec
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+  - label: A2_D
+    db: 4
+    prefix: heilbron_repro_v1/pop_b
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_b
+    condition: 'Arm A (Composition): Improver, pair 2'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040534
+    log_path: run_A2_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=3
+    - opponent_redis_prefix=heilbron_repro_v1/pop_a
+    - feedback_mode=composition
+    - population_role=improver
+    - opponent_result_mode=cached
+    role: improver
+  - label: C1_G
+    db: 5
+    prefix: heilbron_repro_v1/pop_a
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_a
+    condition: 'Arm C (Gradient-in-prompt): Constructor, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040535
+    log_path: run_C1_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=6
+    - opponent_redis_prefix=heilbron_repro_v1/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    - opponent_result_mode=exec
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+  - label: C1_D
+    db: 6
+    prefix: heilbron_repro_v1/pop_b
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_b
+    condition: 'Arm C (Gradient-in-prompt): Improver, pair 1'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040536
+    log_path: run_C1_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=5
+    - opponent_redis_prefix=heilbron_repro_v1/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - opponent_result_mode=cached
+    role: improver
+  - label: C2_G
+    db: 7
+    prefix: heilbron_repro_v1/pop_a
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_a
+    condition: 'Arm C (Gradient-in-prompt): Constructor, pair 2'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040537
+    log_path: run_C2_G.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=8
+    - opponent_redis_prefix=heilbron_repro_v1/pop_b
+    - feedback_mode=gradient_in_prompt
+    - population_role=constructor
+    - opponent_result_mode=exec
+    - pipeline_builder.per_opponent_timeout=\${stage_timeout}
+    role: constructor
+  - label: C2_D
+    db: 8
+    prefix: heilbron_repro_v1/pop_b
+    pipeline: heilbron_repro_v1
+    problem_name: heilbron_repro_v1/pop_b
+    condition: 'Arm C (Gradient-in-prompt): Improver, pair 2'
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    pid: 2040538
+    log_path: run_C2_D.log
+    extra_overrides:
+    - evolution=steady_state
+    - stopper=max_generations
+    - opponent_redis_db=7
+    - opponent_redis_prefix=heilbron_repro_v1/pop_a
+    - feedback_mode=gradient_in_prompt
+    - population_role=improver
+    - opponent_result_mode=cached
+    role: improver
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 200
+  baseline:
+    reference: heilbron/asymmetric-iterations
+    mean: 0.03574
+    metric: actual_fitness (best-ever, 4 G runs)
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-04-20T14:23:59.688395+00:00'
+    commit: 19f1b8cc6d4a3438aeff5d8d2e3532556f86ac70
+    confirmed_at: '2026-04-20T14:23:59.688395+00:00'
+  smoke_test:
+    completed: true
+    db: 1
+    generations: 3
+    log_path: smoke_G.log
+    completed_at: '2026-04-19T16:38:12Z'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-04-19T15:05:22Z'
+    note: ''
+    alignment_check_completed: true
+    alignment_check_at: '2026-04-19T15:05:19Z'
+telemetry:
+  checkpoints: []
+  mid_run_test_eval:
+    completed: false
+    completed_at: null
+  checkpoint_analysis:
+    mid_run:
+      completed: false
+      completed_at: null
+  treatment_checks:
+    completed: false
+    completed_at: null
+    results: []
+treatment_checks:
+  redis_key_pattern:
+  - '{prefix}:metrics:history:program_metrics:valid_frontier_fitness'
+  log_pattern_present:
+  - '\[ProgressBasedSyncHook\] Init.*drift_cap=100000'
+  - pipeline.*heilbron_repro_v1
+  - '\[AsymmetricPipeline\].*role=(constructor|improver)'
+  - '\[AsymmetricPipeline\].*feedback=(composition|gradient_in_prompt)'
+  - 'opponents=\[db=[1-8]'
+  # Opponent result provider telemetry (one of these must appear per run):
+  #   Exec  : emitted by G runs (D opponents re-executed in subprocess)
+  #   Cached: emitted by D runs (G opponents read from Redis, no exec)
+  - '\[AdversarialPipeline\] opponent_result_mode=(exec|cached)'
+  - '(\[ExecOpponentResultProvider\] produced \d+/\d+|\[CachedOpponentResultProvider\] hit=\d+)'
+  log_pattern_absent:
+  - drift_cap exceeded
+  - defaulting to .* population_role
+  - feedback_mode not set
+  fitness_uniformity:
+    max_identical_fraction: 0.95
+control_plane:
+  watchdog:
+    plugin: adversarial
+    sentinel_value: -1.0
+    plot_metrics:
+    - actual_fitness
+    plot_commands:
+    - command: arms-race
+      args:
+        metric: actual_fitness
+        paired: A1_G:A1_D,A2_G:A2_D,C1_G:C1_D,C2_G:C2_D
+      output_name: arms_race.png
+      caption: Arms-race dynamics (G vs D per pair)
+    - command: comparison
+      args:
+        metric: actual_fitness
+        smoothing: ema
+        window: 10
+        annotate-frontier: true
+        no-frontier-for: A1_D,A2_D,C1_D,C2_D
+        max-annotations: 3
+      output_name: evolution_runs_comparison.png
+      caption: G runs vs v1 SOTA (0.0365); D runs excluded from frontier
+    alert_thresholds:
+      invalidity_rate: 0.75
+      stagnation_window: 10
+      generation_gap_threshold: 5
+      # Pipeline uses simple RedisOpponentArchiveProvider (not CellStratified),
+      # so HOF_FETCH/HOF_ROTATE/CELL_PICK are never emitted. Suppress to stop
+      # the event_rate_zero alert from firing on these instrumentation-only
+      # events.
+      # TRACKER_WRITE is only emitted by the constructor-side pipeline
+      # (DGTrackerStage runs on G runs, not D). The event_rate_zero alert
+      # fires continuously on every D run because their TRACKER_WRITE count
+      # is structurally 0. Suppress globally — we trade away the G-side
+      # "tracker went silent" signal for no spam on D.
+      excluded_events:
+      - HOF_FETCH
+      - HOF_ROTATE
+      - CELL_PICK
+      - TRACKER_WRITE
+    poll_interval_s: 3600
+    plot_retries: 3
+    plot_retry_delay_s: 30
+    rolling_comment_threshold_hours: 24
+    checkpoint_milestones:
+    - 0.1
+    - 0.2
+    - 0.5
+    - 1.0
+    no_proxy_hosts: []
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: 2041048
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

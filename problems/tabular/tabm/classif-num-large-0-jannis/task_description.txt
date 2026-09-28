@@ -1,0 +1,4 @@
+TASK — TABULAR BINARY CLASSIFICATION (classif-num-large-0-jannis)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-53]     numeric

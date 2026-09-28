@@ -1,0 +1,44 @@
+# @package _global_
+#
+# Guided mutation pipeline: parent-history summary + structured mutation
+# suggestions. This is the canonical no-external-memory DAG. It does not read
+# cross-run memory cards; write-only memory can still run through
+# memory/write=end_of_run or memory/write=live because write hooks live in the
+# memory config, not here.
+
+defaults:
+  - /pipeline_feature/archive_gate
+  - _self_
+
+pipeline:
+  id: guided
+  reads_external_memory: false
+  routes_program_metadata: true
+
+evolution_context:
+  _target_: gigaevo.entrypoint.evolution_context.EvolutionContext
+  problem_ctx: ${problem_context}
+  llm_wrapper: ${ref:llm}
+  storage: ${ref:program_storage}
+  prompts_dir: ${prompts.dir}
+  prompt_fetcher: ${prompt_fetcher}
+  memory_provider: ${ref:memory.provider}
+
+pipeline_builder:
+  _target_: gigaevo.entrypoint.lineage_memory_pipeline.GuidedMutationPipelineBuilder
+  ctx: ${evolution_context}
+  stage_timeout: ${stage_timeout}
+  dag_timeout: ${dag_timeout}
+  max_parallel: ${dag_concurrency}
+  max_insights: ${max_insights}
+  max_code_length: ${max_code_length}
+  intra_max_children: 24
+  mutation_mode: ${mutation_mode}
+  enable_optuna_stage: ${enable_optuna_stage}
+  optimization_time_budget: ${optimization_time_budget}
+  program_format_feature: ${ref:program_format.evaluation_feature}
+  enable_chain_structural_metrics: ${enable_chain_structural_metrics}
+
+dag_blueprint:
+  _target_: gigaevo.config.helpers.build_dag_from_builder
+  builder: ${pipeline_builder}

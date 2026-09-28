@@ -1,0 +1,486 @@
+"""Memory domain models — the single ``Card`` type and its value objects.
+
+Leaf layer of the memory package: pydantic + stdlib only. Everything above
+(storage, read, write) speaks ``Card``; behavioral differences between insight
+and program-exemplar cards are driven by ``card.kind``, never by type dispatch.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic_core.core_schema import SerializerFunctionWrapHandler
+
+
+class CardKind(StrEnum):
+    INSIGHT = "insight"
+    PROGRAM = "program"
+
+
+class EvidenceSource(StrEnum):
+    FOUNDING = "founding"
+    DIRECT = "direct"
+    UNUSED = "unused"
+    INVALID = "invalid"
+
+
+class CausalStrength(StrEnum):
+    ORIGIN = "origin"
+    DIRECT_ISOLATED = "direct_isolated"
+    DIRECT_BUNDLED = "direct_bundled"
+    EXPOSURE = "exposure"
+    INVALID = "invalid"
+
+
+class DecisionContext(BaseModel):
+    """The state a card-injection decision was made in.
+
+    The base parent's id and metrics plus the crediting child's creation time —
+    enough to identify which parent the decision was made against and to order
+    events over the run. The extension point for richer contexting later.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_key: str = Field(
+        default="",
+        description="Stable key of the task the decision/measurement ran under.",
+    )
+    parent_metrics: dict[str, float] = Field(default_factory=dict)
+    parent_id: str = Field(
+        default="", description="Base parent's program id (whose metrics these are)."
+    )
+    timestamp: datetime | None = Field(
+        default=None, description="Crediting child's creation time (UTC)."
+    )
+    search_phase: str = Field(
+        default="", description="Decision-time evolution iteration marker."
+    )
+    parent_quality_quantile: float | None = Field(
+        default=None,
+        description="Base parent's fitness quantile in the current pool/archive.",
+    )
+    local_opportunity_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Decision-time opportunity count for the local behavior cell.",
+    )
+    local_visit_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Decision-time visit count for the local behavior cell.",
+    )
+
+
+class AssignmentRecord(BaseModel):
+    """Durable record of one memory read-policy assignment."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: int = Field(default=2)
+    decision_id: str
+    policy_version: str
+    task_key: str
+    ordered_eligible_ids: tuple[str, ...] = Field(default=())
+    assigned_ids: tuple[str, ...] = Field(default=())
+    delivered_ids: tuple[str, ...] = Field(default=())
+    arm: Literal["injected", "none"]
+    probe_arm: Literal["none", "treated", "control"] = Field(default="none")
+    randomized: bool = Field(default=False)
+    propensity_kind: Literal["observational", "probe_bernoulli", "exact"] = Field(
+        default="observational"
+    )
+    propensities: dict[str, float] = Field(default_factory=dict)
+    ope_eligible: bool = Field(
+        default=False,
+        description="True only when this record belongs to an explicit randomized "
+        "probe arm with a known assignment propensity.",
+    )
+    q_hat_control: float | None = Field(
+        default=None,
+        description="Predicted terminal child-minus-base delta for the complete "
+        "control slate.",
+    )
+    q_hat_treated: float | None = Field(
+        default=None,
+        description="Predicted terminal child-minus-base delta for the complete "
+        "treated slate.",
+    )
+    predicted_help: dict[str, float] = Field(
+        default_factory=dict,
+        description="Decision-time posterior-mean P(help), keyed by card id.",
+    )
+    predicted_gain: dict[str, float] = Field(
+        default_factory=dict,
+        description="Untaxed decision-time outcome EV, keyed by card id: posterior-mean "
+        "P(help) x magnitude, except known bootstrap support whose magnitude is already "
+        "the raw-EV mean.",
+    )
+    predicted_no_card_gain: dict[str, float] = Field(
+        default_factory=dict,
+        description="Decision-time counterfactual gain without injection, keyed by card id.",
+    )
+    pending_by_card: dict[str, int] = Field(default_factory=dict)
+    pending_discount_by_card: dict[str, float] = Field(default_factory=dict)
+    context: DecisionContext
+    bd_cell: tuple[int, ...] | None = Field(default=None)
+    timestamp: datetime | None = Field(default=None)
+
+
+class CardAssignmentSource(BaseModel):
+    """Frozen source decision/context for one card delivered to a crossover."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_card_id: str
+    parent_id: str
+    decision_id: str = ""
+    source_context: DecisionContext
+    bd_cell: tuple[int, ...] | None = None
+    parent_metrics: dict[str, float] = Field(default_factory=dict)
+    parent_scores: tuple[float, ...] | None = None
+    parent_score_signature: str = ""
+
+
+class MutationAssignmentRecord(BaseModel):
+    """Full delivered mutation slate, separate from parent read assignments."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: int = 2
+    mutation_id: str
+    parent_ids: tuple[str, ...] = ()
+    delivered_ids: tuple[str, ...] = ()
+    used_ids: tuple[str, ...]
+    source_decision_ids: tuple[str, ...] = ()
+    card_sources: dict[str, CardAssignmentSource] = Field(default_factory=dict)
+    ope_eligible: bool = False
+
+    @model_validator(mode="after")
+    def _used_cards_were_delivered(self) -> MutationAssignmentRecord:
+        if not set(self.used_ids) <= set(self.delivered_ids):
+            raise ValueError("used card ids must be a subset of delivered card ids")
+        return self
+
+
+class EvidenceAttribution(BaseModel):
+    """Causal provenance for one outcome event.
+
+    ``ContextualGain`` keeps the numeric reward. This block says how much causal
+    credit the reward should carry. A bundled child that used three cards, for
+    example, stores the full delta on each card while each card receives
+    ``credit_weight=1/3`` in posterior evidence — the split lives in the weight,
+    never in the gain magnitude.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: EvidenceSource = Field(
+        default=EvidenceSource.DIRECT,
+        description="Origin of the evidence: birth, direct use, unused exposure, or invalid child.",
+    )
+    causal_strength: CausalStrength = Field(
+        default=CausalStrength.DIRECT_ISOLATED,
+        description="How cleanly this event identifies the card's causal effect.",
+    )
+    source_child_id: str = Field(
+        default="", description="Program id of the child that produced this event."
+    )
+    used_card_count: int = Field(
+        default=1,
+        ge=0,
+        description="Number of memory cards cited as used by the child.",
+    )
+    child_change_count: int = Field(
+        default=1,
+        ge=0,
+        description="Number of concrete child changes this event bundles, when known.",
+    )
+    authored_card_count: int = Field(
+        default=1,
+        ge=0,
+        description="Number of cards authored from the same source child, when known.",
+    )
+    authored_card_index: int | None = Field(
+        default=None,
+        ge=0,
+        description="Index of this card among cards authored from the same source child.",
+    )
+    credit_weight: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Effective evidence weight for posterior/EV support; inferred when unset.",
+    )
+
+
+class Measurement(BaseModel):
+    """A point estimate plus its sampling uncertainty.
+
+    Generic value object for any stochastic evaluation: ``value`` is the
+    estimated effect, ``se`` its standard error. ``se=0`` means the value is
+    treated as exact — the degenerate point case every uncertainty-blind
+    consumer reduces to. ``se=None`` means uncertainty could not be measured,
+    distinct from an exact result.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    value: float
+    se: float | None = Field(default=0.0, ge=0.0)
+
+
+class ContextualGain(BaseModel):
+    """One selected-card outcome: the gain a card earned in a context.
+
+    For use-attributed events, ``gain`` is the child-minus-parent best-fitness
+    delta after subtracting the fitted no-card baseline for that decision
+    context. Founding events keep the raw origin delta. ``unused`` marks a card
+    that was selected into the prompt but not cited by the mutator; it is a
+    failed exposure, not a gain-magnitude observation.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    context: DecisionContext
+    gain: float
+    gain_se: float | None = Field(
+        default=0.0,
+        ge=0.0,
+        description="Standard error of ``gain`` under evaluation stochasticity. "
+        "0 means exact (a deterministic evaluation or point estimator); a positive "
+        "value is the evaluation-noise se; None means a degraded paired measurement "
+        "whose uncertainty is unknown and is treated conservatively wide, never exact.",
+    )
+    invalid: bool = Field(
+        default=False,
+        description="True for an evaluated-and-judged-invalid child — a forced "
+        "harm event whose gain magnitude is meaningless.",
+    )
+    founding: bool = Field(
+        default=False,
+        description="True for the event seeded at authoring from the parent-child "
+        "pair the card was distilled from. The founding child predates the card, "
+        "so use-attribution can never re-credit it; it is preserved across the "
+        "from-scratch restamp rather than recomputed each sweep.",
+    )
+    unused: bool = Field(
+        default=False,
+        description="True when the card was selected for the prompt but the "
+        "mutator did not declare it used. Counts as exposure/failure evidence, "
+        "but is excluded from gain-magnitude and bootstrap EV pricing.",
+    )
+    attribution: EvidenceAttribution | None = Field(
+        default=None,
+        description="Optional causal attribution metadata for weighted reputation.",
+    )
+
+
+class DecisionMetrics(BaseModel):
+    """Efficacy metrics that decision paths read.
+
+    Exactly the fields the Thompson auction, the reputation harm predicate, and
+    the prompt renderer consume — the vocabulary reputation computes from a
+    card's gain events, and nothing more. Field names are the serialized-card
+    contract, including the mixed-case ``IntroGain_*`` keys.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    posterior_a: float | None = Field(
+        default=None,
+        description="Beta alpha of the downside posterior over per-introduction gains.",
+    )
+    posterior_b: float | None = Field(
+        default=None, description="Beta beta of the downside posterior."
+    )
+    intro_events: float = Field(
+        default=0,
+        description="Effective introduction-event weight backing this row.",
+    )
+    k_harm: float | None = Field(
+        default=None,
+        description="Effective introduction-event harm mass: per event, the probability "
+        "its baseline-adjusted true gain is negative — the exact sign indicator for an "
+        "exact event (gain_se=0, the historical strict sign test), the Gaussian tail "
+        "mass when gain_se>0, and maximally uncertain 0.5 mass when gain_se is None. "
+        "Fractional under noisy or unknown-uncertainty events.",
+    )
+    p_help_mean: float | None = Field(
+        default=None, description="Posterior mean P(gain >= threshold), a / (a + b)."
+    )
+    p_help_lo20: float | None = Field(
+        default=None, description="20th-percentile lower credible bound of P(help)."
+    )
+    efficacy_confident: bool | None = Field(
+        default=None,
+        description="True when the lower credible bound clears the confidence threshold.",
+    )
+    IntroGain_best_median: float | None = Field(
+        default=None, description="Median raw child-minus-parent best-fitness gain."
+    )
+    IntroGain_bootstrap_ev_mean: float | None = Field(
+        default=None,
+        description="Mean expected-gain estimate from bootstrap resampling.",
+    )
+    IntroGain_bootstrap_ev_lo20: float | None = Field(
+        default=None,
+        description="Lower bootstrap expected-gain quantile used as a pessimistic EV.",
+    )
+    IntroGain_bootstrap_ev_hi80: float | None = Field(
+        default=None,
+        description="Upper bootstrap expected-gain quantile: the optimistic EV read "
+        "that must be non-positive before a card is benched as a proven loser.",
+    )
+
+
+class CardStatsBlock(DecisionMetrics):
+    """A card's efficacy-statistics block, computed by reputation from the
+    card's gain events."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    foreign_help_events: float = Field(
+        default=0.0,
+        description="Sign-only effective help mass from uses on other tasks.",
+    )
+    foreign_total_events: float = Field(
+        default=0.0,
+        description="Sign-only effective use mass observed on other tasks.",
+    )
+
+    @model_serializer(mode="wrap")
+    def serialize_without_unset_defaults(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """Serialize exactly the keys the source block carried: explicitly set
+        fields (including explicit nulls) plus extras; unset defaults stay out
+        so a serialized card block roundtrips to its original keys."""
+        declared = type(self).model_fields
+        return {
+            key: value
+            for key, value in handler(self).items()
+            if key in self.model_fields_set or key not in declared
+        }
+
+
+class CardUseTrial(BaseModel):
+    """One randomized memory-v2 offer outcome carried with a shared card.
+
+    The transfer model intentionally keeps only a scale-free success bit.  The
+    richer task-local reward, safety, and lineage evidence remains in the v2
+    causal ledger.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    decision_id: str = Field(min_length=1)
+    run_id: str = Field(min_length=1)
+    task_key: str = Field(min_length=1)
+    treatment: bool
+    success: bool
+
+
+def union_use_trials(
+    *groups: tuple[CardUseTrial, ...],
+) -> tuple[CardUseTrial, ...]:
+    """Union trials by causal decision id in a deterministic order."""
+
+    by_decision: dict[str, CardUseTrial] = {}
+    for group in groups:
+        for trial in group:
+            by_decision[trial.decision_id] = trial
+    return tuple(
+        sorted(
+            by_decision.values(),
+            key=lambda row: (row.task_key, row.run_id, row.decision_id),
+        )
+    )
+
+
+class Card(BaseModel):
+    """The one memory card.
+
+    ``kind`` distinguishes distilled insights from program exemplars; the
+    exemplar-only fields (``program_id``, ``code``, ``fitness``) are kind-gated
+    so an insight card can never smuggle them in.
+    Cards are frozen — the write path evolves them via ``model_copy(update=...)``.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(description="Stable bank id of the card.")
+    task_key: str = Field(default="", description="Stable key of the authoring task.")
+    kind: CardKind = Field(default=CardKind.INSIGHT)
+    category: str = Field(
+        default="general",
+        description="Free-form topical category assigned by the authoring librarian.",
+    )
+    description: str = Field(
+        default="", description="The idea itself — the text injected into prompts."
+    )
+    explanation_summary: str = Field(
+        default="",
+        description="One-line condensed reason the lever works; a distinct "
+        "retrieval channel from the fuller description.",
+    )
+    task_description: str = Field(
+        default="", description="Task description of the run that produced the card."
+    )
+    task_description_summary: str = Field(
+        default="", description="LLM-condensed one-line task summary."
+    )
+    programs: tuple[str, ...] = Field(
+        default=(), description="Program ids that exhibited the idea."
+    )
+    absorbed_ids: tuple[str, ...] = Field(
+        default=(),
+        description="Historical bank aliases whose frozen attribution and causal "
+        "evidence belong to this card lineage.",
+    )
+    gain_events: tuple[ContextualGain, ...] = Field(
+        default=(),
+        description="Use-attributed base-relative injection events; reputation "
+        "computes this card's efficacy block from them.",
+    )
+    use_trials: tuple[CardUseTrial, ...] = Field(
+        default=(),
+        description="Randomized, task-labelled binary outcomes used only for "
+        "cross-task usefulness transfer.",
+    )
+    program_id: str = Field(
+        default="",
+        description="Exemplar program's id in the run database (kind=program only).",
+    )
+    code: str = Field(
+        default="", description="Exemplar program's source code (kind=program only)."
+    )
+    fitness: float | None = Field(
+        default=None,
+        description="Exemplar fitness at capture time (kind=program only).",
+    )
+
+    @model_validator(mode="after")
+    def _gate_kind_fields(self) -> Card:
+        if self.kind is CardKind.PROGRAM:
+            if not self.program_id:
+                raise ValueError("kind=program requires a non-empty program_id")
+        elif self.program_id or self.code or self.fitness is not None:
+            raise ValueError(
+                "program_id/code/fitness are exemplar fields — set kind=program"
+            )
+        if self.id and self.id in self.absorbed_ids:
+            raise ValueError("a card cannot absorb its own id")
+        return self
+
+
+def card_brief(card: Card) -> str:
+    """Compact semantic projection used for retrieval and equivalence."""
+    parts = [card.description]
+    why = card.explanation_summary.strip()
+    if why:
+        parts.append(f"why: {why}")
+    return " | ".join(parts)

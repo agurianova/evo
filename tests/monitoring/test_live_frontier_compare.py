@@ -1,0 +1,384 @@
+"""Smoke tests for the live frontier-comparison daemon.
+
+Mirrors the test style of ``tests/monitoring/test_live_profiler.py``:
+we test the pure compute helper (``compute_snapshot``) and the
+thread-start contract (``start_live_frontier_compare``) — not the actual
+loop timing, which would make tests flaky on shared CI infrastructure.
+"""
+
+from __future__ import annotations
+
+import threading
+
+import pytest
+
+from gigaevo.monitoring.live_frontier_compare import (
+    FrontierCompareSnapshot,
+    MetricComparison,
+    _extend_frontier_to_axis,
+    _fetch_histories,
+    _render_frontier_plot,
+    compute_snapshot,
+    format_snapshot,
+    start_live_frontier_compare,
+)
+
+
+class TestComputeSnapshot:
+    def test_returns_empty_snapshot_when_no_data(self) -> None:
+        snap = compute_snapshot(
+            metrics=["fitness"],
+            frontier_history={"fitness": []},
+            iter_mean_history={"fitness": []},
+            program_history={"fitness": []},
+            higher_is_better={"fitness": True},
+        )
+        assert snap.metrics == {}
+
+    def test_higher_is_better_positive_delta_means_improvement(self) -> None:
+        # frontier-best = 0.5 (steady), current iteration best = 0.7.
+        # delta_best = current_best - frontier_best = +0.2 → improvement.
+        snap = compute_snapshot(
+            metrics=["fitness"],
+            frontier_history={"fitness": [(0, 0.5), (1, 0.5)]},
+            iter_mean_history={"fitness": [(0, 0.3), (1, 0.5)]},
+            program_history={
+                "fitness": [(0, 0.3), (0, 0.4), (1, 0.5), (1, 0.7)],
+            },
+            higher_is_better={"fitness": True},
+        )
+        comp = snap.metrics["fitness"]
+        assert comp.frontier_best == pytest.approx(0.5)
+        assert comp.current_best == pytest.approx(0.7)
+        assert comp.delta_best == pytest.approx(0.2)
+        # delta_best_sign tracks "improvement direction" relative to
+        # higher_is_better. A positive delta_best with higher_is_better=True
+        # means improvement.
+        assert comp.delta_best_sign == "+"
+        # current_mean = latest per-iter mean = 0.5; frontier_mean = mean over
+        # frontier values = (0.5 + 0.5) / 2 = 0.5; delta_mean = 0.0.
+        assert comp.current_mean == pytest.approx(0.5)
+        assert comp.frontier_mean == pytest.approx(0.5)
+
+    def test_lower_is_better_inverts_delta_sign(self) -> None:
+        # frontier-best = 10.0 (lower is better), current best = 8.0.
+        # delta_best = current - frontier = -2.0; for lower_is_better this is
+        # an *improvement*, so delta_best_sign is "+".
+        snap = compute_snapshot(
+            metrics=["loss"],
+            frontier_history={"loss": [(0, 10.0)]},
+            iter_mean_history={"loss": [(0, 12.0)]},
+            program_history={"loss": [(0, 8.0), (0, 9.0)]},
+            higher_is_better={"loss": False},
+        )
+        comp = snap.metrics["loss"]
+        assert comp.frontier_best == pytest.approx(10.0)
+        # current best with lower_is_better is the *min* over the latest iter.
+        assert comp.current_best == pytest.approx(8.0)
+        assert comp.delta_best == pytest.approx(-2.0)
+        assert comp.delta_best_sign == "+"
+
+    def test_skips_metric_with_no_frontier_or_no_current(self) -> None:
+        snap = compute_snapshot(
+            metrics=["fitness", "ghost"],
+            frontier_history={"fitness": [(0, 0.5)], "ghost": []},
+            iter_mean_history={"fitness": [(0, 0.4)], "ghost": []},
+            program_history={"fitness": [(0, 0.5)], "ghost": []},
+            higher_is_better={"fitness": True, "ghost": True},
+        )
+        assert "fitness" in snap.metrics
+        assert "ghost" not in snap.metrics
+
+
+class TestFormatSnapshot:
+    def test_format_emits_one_line_per_metric(self) -> None:
+        snap = FrontierCompareSnapshot(
+            metrics={
+                "fitness": MetricComparison(
+                    name="fitness",
+                    current_best=0.7,
+                    current_mean=0.5,
+                    frontier_best=0.5,
+                    frontier_mean=0.5,
+                    delta_best=0.2,
+                    delta_mean=0.0,
+                    delta_best_sign="+",
+                ),
+            }
+        )
+        line = format_snapshot(snap)
+        assert "fitness" in line
+        assert "current_best=" in line
+        assert "frontier_best=" in line
+        assert "delta_best=" in line
+
+    def test_format_returns_idle_marker_when_empty(self) -> None:
+        snap = FrontierCompareSnapshot(metrics={})
+        line = format_snapshot(snap)
+        assert "(no frontier data yet)" in line
+
+
+class TestRenderFrontierPlot:
+    def test_writes_png_when_frontier_data_present(self, tmp_path) -> None:
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="fitness",
+            frontier_history=[(0, 0.3), (1, 0.5), (2, 0.7)],
+            iter_mean_history=[(0, 0.2), (1, 0.4), (2, 0.6)],
+            higher_is_better=True,
+        )
+        out = tmp_path / "frontier_fitness.png"
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+    def test_mean_remains_visible_when_it_matches_frontier(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from gigaevo.monitoring import live_frontier_compare as mod
+
+        captured: list[dict] = []
+        original_plot = mod.plt.Axes.plot
+
+        def recording_plot(self, *args, **kwargs):
+            captured.append(kwargs.copy())
+            return original_plot(self, *args, **kwargs)
+
+        monkeypatch.setattr(mod.plt.Axes, "plot", recording_plot)
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="fitness",
+            frontier_history=[(0, 0.3), (1, 0.5)],
+            iter_mean_history=[(0, 0.3), (1, 0.5)],
+            higher_is_better=True,
+        )
+
+        mean_style = next(
+            style for style in captured if style.get("label") == "Per-item mean fitness"
+        )
+        assert mean_style["marker"] == "o"
+        assert mean_style["zorder"] > 3
+
+    def test_no_file_when_frontier_empty(self, tmp_path) -> None:
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="fitness",
+            frontier_history=[],
+            iter_mean_history=[(0, 0.1)],
+            higher_is_better=True,
+        )
+        assert not (tmp_path / "frontier_fitness.png").exists()
+
+    def test_metric_with_slash_is_safe_in_filename(self, tmp_path) -> None:
+        # MetricsTracker tags can contain '/'; renderer must sanitise it.
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="loss/train",
+            frontier_history=[(0, 1.0), (1, 0.5)],
+            iter_mean_history=[],
+            higher_is_better=False,
+        )
+        # No `/` in the produced filename — sanitised to '_'.
+        out = tmp_path / "frontier_loss_train.png"
+        assert out.exists()
+
+
+class TestExtendFrontierToAxis:
+    def test_extends_flat_to_match_other_x_max_when_extended(self) -> None:
+        fi, fv = _extend_frontier_to_axis(
+            [4, 6], [-0.448, -0.4296], [0, 1, 4, 6, 12, 20]
+        )
+        assert fi == [4, 6, 20]
+        assert fv == [-0.448, -0.4296, -0.4296]
+
+    def test_does_not_extend_when_frontier_already_covers_axis(self) -> None:
+        fi, fv = _extend_frontier_to_axis([0, 5, 10], [1.0, 2.0, 3.0], [0, 5, 10])
+        assert fi == [0, 5, 10]
+        assert fv == [1.0, 2.0, 3.0]
+
+    def test_does_not_extend_when_other_iters_end_before_frontier(self) -> None:
+        fi, fv = _extend_frontier_to_axis([0, 5, 10], [1.0, 2.0, 3.0], [0, 1, 2])
+        assert fi == [0, 5, 10]
+        assert fv == [1.0, 2.0, 3.0]
+
+    def test_empty_frontier_returns_empty(self) -> None:
+        fi, fv = _extend_frontier_to_axis([], [], [0, 1, 2])
+        assert fi == []
+        assert fv == []
+
+    def test_empty_other_iters_returns_frontier_unchanged(self) -> None:
+        fi, fv = _extend_frontier_to_axis([0, 5], [1.0, 2.0], [])
+        assert fi == [0, 5]
+        assert fv == [1.0, 2.0]
+
+    def test_render_plot_flat_segment_visible_beyond_last_frontier_point(
+        self, tmp_path
+    ) -> None:
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="fitness",
+            frontier_history=[(4, -0.448), (6, -0.4296)],
+            iter_mean_history=[(i, -0.5 + 0.005 * i) for i in range(0, 21)],
+            higher_is_better=True,
+        )
+        out = tmp_path / "frontier_fitness.png"
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+
+class TestRenderFrontierAnnotates:
+    def test_render_calls_annotate_frontier_points_with_running_best(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from gigaevo.monitoring import live_frontier_compare as mod
+
+        captured: dict = {}
+
+        def fake_annotate(
+            ax, x_vals, frontier_vals, *, minimize, max_annotations, color, **kw
+        ):
+            captured["x_vals"] = list(x_vals)
+            captured["frontier_vals"] = list(frontier_vals)
+            captured["minimize"] = minimize
+            captured["max_annotations"] = max_annotations
+
+        monkeypatch.setattr(mod, "annotate_frontier_points", fake_annotate)
+
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="fitness",
+            frontier_history=[(0, 0.1), (1, 0.3), (2, 0.7)],
+            iter_mean_history=[(0, 0.05), (1, 0.2), (2, 0.5)],
+            higher_is_better=True,
+        )
+        assert captured["x_vals"] == [0, 1, 2]
+        assert captured["frontier_vals"] == [0.1, 0.3, 0.7]
+        assert captured["minimize"] is False
+        assert captured["max_annotations"] >= 1
+
+    def test_render_passes_minimize_true_when_lower_is_better(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        from gigaevo.monitoring import live_frontier_compare as mod
+
+        captured: dict = {}
+
+        def fake_annotate(
+            ax, x_vals, frontier_vals, *, minimize, max_annotations, color, **kw
+        ):
+            captured["minimize"] = minimize
+            captured["frontier_vals"] = list(frontier_vals)
+
+        monkeypatch.setattr(mod, "annotate_frontier_points", fake_annotate)
+
+        _render_frontier_plot(
+            output_dir=tmp_path,
+            metric="loss",
+            frontier_history=[(0, 1.0), (1, 0.5), (2, 0.2)],
+            iter_mean_history=[],
+            higher_is_better=False,
+        )
+        assert captured["minimize"] is True
+        assert captured["frontier_vals"] == [1.0, 0.5, 0.2]
+
+
+class TestFetchHistories:
+    def test_builds_tracker_tags_and_parses_entries(self) -> None:
+        calls: list[str] = []
+
+        class FakeReader:
+            def get_history(self, tag, start=0, end=-1):
+                calls.append(tag)
+                if "frontier" in tag:
+                    return [{"s": 1, "t": 0.0, "v": 0.5, "k": "scalar"}]
+                return []
+
+        frontier, iter_mean, program = _fetch_histories(FakeReader(), ["fitness"])
+        assert calls == [
+            "program_metrics/valid_frontier_fitness",
+            "program_metrics/valid_iter_fitness_mean",
+            "program_metrics/valid_program_fitness",
+        ]
+        assert frontier == {"fitness": [(1, 0.5)]}
+        assert iter_mean == {"fitness": []}
+        assert program == {"fitness": []}
+
+    def test_malformed_entries_skipped(self) -> None:
+        class FakeReader:
+            def get_history(self, tag, start=0, end=-1):
+                return [
+                    {"s": 1, "v": 0.5},
+                    {"s": None, "v": 0.6},
+                    {"v": 0.7},
+                    {"s": 2},
+                    {"s": 3, "v": [1.0, 2.0]},  # hist entry — not a scalar
+                    {"s": 4, "v": 0.9},
+                ]
+
+        frontier, _, _ = _fetch_histories(FakeReader(), ["m"])
+        assert frontier == {"m": [(1, 0.5), (4, 0.9)]}
+
+
+class TestStartLiveFrontierCompare:
+    def test_returns_event_and_starts_daemon_thread(self) -> None:
+        # No metrics writer is initialized in tests — the thread no-ops
+        # each tick. We only verify the bootstrap contract.
+        stop = start_live_frontier_compare(
+            metrics=["fitness"],
+            higher_is_better={"fitness": True},
+            interval_s=3600.0,
+        )
+        try:
+            assert isinstance(stop, threading.Event)
+            threads = {t.name: t for t in threading.enumerate()}
+            assert "live-frontier-compare" in threads
+            assert threads["live-frontier-compare"].daemon is True
+        finally:
+            stop.set()
+
+    def test_file_target_accepts_output_dir(self, tmp_path) -> None:
+        stop = start_live_frontier_compare(
+            metrics=["fitness"],
+            higher_is_better={"fitness": True},
+            interval_s=3600.0,
+            emit_targets=("file",),
+            output_dir=tmp_path,
+        )
+        try:
+            assert isinstance(stop, threading.Event)
+            threads = {t.name: t for t in threading.enumerate()}
+            assert "live-frontier-compare" in threads
+        finally:
+            stop.set()
+
+    def test_file_target_without_output_dir_still_starts(self) -> None:
+        # Resilient: file emit silently drops if no output_dir was wired.
+        # The daemon must still start so log/telegram targets work.
+        stop = start_live_frontier_compare(
+            metrics=["fitness"],
+            higher_is_better={"fitness": True},
+            interval_s=3600.0,
+            emit_targets=("file",),
+            output_dir=None,
+        )
+        try:
+            assert isinstance(stop, threading.Event)
+        finally:
+            stop.set()
+
+    def test_disabled_returns_event_without_starting_a_new_thread(self) -> None:
+        # Snapshot the thread set before/after to avoid coupling to other
+        # tests that may have started a still-shutting-down thread.
+        before = {id(t) for t in threading.enumerate()}
+        stop = start_live_frontier_compare(
+            metrics=["fitness"],
+            higher_is_better={"fitness": True},
+            interval_s=3600.0,
+            enabled=False,
+        )
+        try:
+            assert isinstance(stop, threading.Event)
+            after = {id(t) for t in threading.enumerate()}
+            new_threads = after - before
+            assert new_threads == set()
+        finally:
+            stop.set()

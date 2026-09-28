@@ -1,0 +1,1 @@
+FINAL STEP — retrieval budget is exhausted. mode MUST be "final". Apply the same utility bar: select only candidates that pass it, otherwise return an empty selection.

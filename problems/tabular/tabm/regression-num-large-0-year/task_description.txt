@@ -1,0 +1,4 @@
+TASK — TABULAR REGRESSION (regression-num-large-0-year)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-89]     numeric

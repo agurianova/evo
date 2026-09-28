@@ -1,0 +1,126 @@
+MEMORY-ENABLED HOVER BASELINE PAIR — RUN-END HEALTH REPORT (20260710_041404)
+generated: 2026-07-10 11:52:22
+
+--- final best fitness (memory runs) ---
+2026-07-10 11:52:41.651 | DEBUG    | gigaevo.database.disk_program_storage:close:431 - [DiskProgramStorage] close() for prefix 'chains_hover_full7'
+[
+  {
+    "Rank": 1,
+    "ID": "e431bed1-e6d",
+    "Label": "MEM_R1",
+    "Gen": 6,
+    "Fitness": 0.8322222222222222,
+    "State": "done"
+  },
+  {
+    "Rank": 2,
+    "ID": "e55a7f4e-4d4",
+    "Label": "MEM_R1",
+    "Gen": 5,
+    "Fitness": 0.83,
+    "State": "done"
+  },
+  {
+    "Rank": 3,
+    "ID": "4a6dd35d-de6",
+    "Label": "MEM_R1",
+    "Gen": 7,
+    "Fitness": 0.8222222222222222,
+    "State": "running"
+  }
+]
+2026-07-10 11:52:51.284 | DEBUG    | gigaevo.database.disk_program_storage:close:431 - [DiskProgramStorage] close() for prefix 'chains_hover_full7'
+[
+  {
+    "Rank": 1,
+    "ID": "381aafd4-a68",
+    "Label": "MEM_R2",
+    "Gen": 6,
+    "Fitness": 0.8011111111111111,
+    "State": "done"
+  },
+  {
+    "Rank": 2,
+    "ID": "88cd48c2-d92",
+    "Label": "MEM_R2",
+    "Gen": 7,
+    "Fitness": 0.7977777777777778,
+    "State": "done"
+  },
+  {
+    "Rank": 3,
+    "ID": "3e7d4877-9af",
+    "Label": "MEM_R2",
+    "Gen": 6,
+    "Fitness": 0.7966666666666666,
+    "State": "done"
+  }
+]
+no-memory baseline pair (finished 2026-07-09): NOMEM_R1 0.8089 / NOMEM_R2 0.8078
+
+--- memory behavior analysis ---
+=== R1 ===
+selection events: 409  (injected: 187, with candidates: 287)
+empty reasons: {'(injected)': 187, 'research_empty': 122, 'auction_rejected': 100}
+injection lanes: {'probe': 100, 'auction': 87}
+auction-lane injection fraction: 30.31% of candidate events, 21.27% of all selection events (expert band 30-40% of eligible)
+probe-lane injections: 100
+top injected cards: [('mem-600309b5710e', 17), ('mem-19354dfbcb8c', 17), ('mem-4e68b63305b9', 12), ('program-e615cfb5-da30-4f52-a261-516a2041228c', 11), ('mem-39cee1d38ab4', 11), ('mem-50a9c7a98cd3', 10), ('mem-f4d59ed0e3f8', 10), ('mem-e383058fef55', 9)]
+bids: 801  ev_floor rejections: 536 (66.9%)  no_card_gate rejections: 174
+support kinds (all bids): {'cold_prior': 465, 'ev_rewards': 336}
+support kinds early half: {'cold_prior': 267, 'ev_rewards': 101}
+support kinds late half:  {'ev_rewards': 235, 'cold_prior': 198}
+bids with posterior moved off (1,1): 693/801
+zombie suspects (probe_eligible with support_n>=3): none
+bank: 27 cards {'insight': 15, 'program': 12}
+write ledger ops: {'merged': 202, 'updated': 146, 'added': 63, 'rejected_harm': 18, 'evicted': 1}
+no-card evidence: {'observations': 151, 'contexts': 25, 'invalid': 1}
+
+=== R2 ===
+selection events: 429  (injected: 294, with candidates: 368)
+empty reasons: {'(injected)': 294, 'auction_rejected': 74, 'research_empty': 61}
+injection lanes: {'auction': 215, 'probe': 79}
+auction-lane injection fraction: 58.42% of candidate events, 50.12% of all selection events (expert band 30-40% of eligible)
+probe-lane injections: 79
+top injected cards: [('program-256d8ece-945b-440f-949f-05b7e8452303', 24), ('mem-02f6b4adbdba', 20), ('program-8821f918-1ec3-470d-b85b-b94bff5fb504', 18), ('mem-04bcb63780f2', 17), ('mem-747e9e53e419', 16), ('program-51784c8f-a3b1-4801-b670-711bb430d547', 14), ('program-257366da-44ed-4922-b3da-90f701ebccfd', 13), ('program-4a81032a-04fc-4513-8501-13dfbba25b30', 13)]
+bids: 1391  ev_floor rejections: 991 (71.2%)  no_card_gate rejections: 173
+support kinds (all bids): {'cold_prior': 837, 'ev_rewards': 554}
+support kinds early half: {'cold_prior': 512, 'ev_rewards': 204}
+support kinds late half:  {'ev_rewards': 350, 'cold_prior': 325}
+bids with posterior moved off (1,1): 1275/1391
+zombie suspects (probe_eligible with support_n>=3): none
+bank: 27 cards {'insight': 15, 'program': 12}
+write ledger ops: {'merged': 232, 'updated': 174, 'added': 75, 'rejected_harm': 24}
+no-card evidence: {'observations': 138, 'contexts': 28, 'invalid': 2}
+
+=== VERDICTS (JSON) ===
+{
+  "R1": {
+    "auction_fraction_in_hard_band": true,
+    "auction_fraction_of_candidates": 0.3031,
+    "no_card_dominates": true,
+    "max_card": {
+      "card_id": "mem-600309b5710e",
+      "count": 17
+    },
+    "probe_lane_active": true,
+    "reputation_learned": true,
+    "no_zombies": true,
+    "no_card_evidence_accumulating": true,
+    "cards_written": 27
+  },
+  "R2": {
+    "auction_fraction_in_hard_band": true,
+    "auction_fraction_of_candidates": 0.5842,
+    "no_card_dominates": true,
+    "max_card": {
+      "card_id": "program-256d8ece-945b-440f-949f-05b7e8452303",
+      "count": 24
+    },
+    "probe_lane_active": true,
+    "reputation_learned": true,
+    "no_zombies": true,
+    "no_card_evidence_accumulating": true,
+    "cards_written": 27
+  }
+}

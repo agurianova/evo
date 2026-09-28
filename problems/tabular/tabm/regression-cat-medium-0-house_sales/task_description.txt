@@ -1,0 +1,5 @@
+TASK — TABULAR REGRESSION (regression-cat-medium-0-house_sales)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-14]     numeric
+- [15-16]    binary (0/1)

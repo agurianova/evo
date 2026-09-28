@@ -1,0 +1,440 @@
+"""Tests for redis.resume correctness.
+
+Covers three failure modes that would make a resumed run diverge from a
+contiguous run:
+  1. RUNNING programs stuck forever  →  recover_stranded_programs()
+  2. EngineMetrics.iteration reset to 0  →  EvolutionEngine.restore_state()
+  3. MapElitesMultiIsland.generation / last_migration reset to 0
+       →  MapElitesMultiIsland.restore_state()
+"""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from gigaevo.evolution.engine.config import SteadyStateEngineConfig
+from gigaevo.evolution.engine.snapshot import (
+    ENGINE_SNAPSHOT_KEY,
+    EngineSnapshot,
+)
+from gigaevo.evolution.engine.steady_state import SteadyStateEvolutionEngine
+from gigaevo.evolution.storage.archive_storage import RedisArchiveStorageFactory
+from gigaevo.evolution.strategies.elite_selectors import RandomEliteSelector
+from gigaevo.evolution.strategies.island import IslandConfig
+from gigaevo.evolution.strategies.migrant_selectors import RandomMigrantSelector
+from gigaevo.evolution.strategies.models import (
+    BehaviorSpace,
+    DynamicBehaviorSpace,
+    LinearBinning,
+)
+from gigaevo.evolution.strategies.multi_island import (
+    _RUN_STATE_GENERATION,
+    _RUN_STATE_LAST_MIGRATION,
+    MapElitesMultiIsland,
+)
+from gigaevo.evolution.strategies.selectors import SumArchiveSelector
+from gigaevo.programs.program import Program
+from gigaevo.programs.program_state import ProgramState
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _prog(state: ProgramState = ProgramState.RUNNING) -> Program:
+    p = Program(code="def solve(): return 42", state=state, atomic_counter=999_999)
+    p.add_metrics({"score": 50.0, "x": 5.0})
+    return p
+
+
+def _make_behavior_space() -> BehaviorSpace:
+    return BehaviorSpace(
+        bins={"x": LinearBinning(min_val=0, max_val=10, num_bins=5, type="linear")}
+    )
+
+
+def _make_island_config(island_id: str = "test") -> IslandConfig:
+    return IslandConfig(
+        island_id=island_id,
+        behavior_space=_make_behavior_space(),
+        max_size=None,
+        archive_selector=SumArchiveSelector(fitness_keys=["score"]),
+        archive_remover=None,
+        elite_selector=RandomEliteSelector(),
+        migrant_selector=RandomMigrantSelector(),
+    )
+
+
+def _make_dynamic_island_config(island_id: str = "dynamic") -> IslandConfig:
+    return IslandConfig(
+        island_id=island_id,
+        behavior_space=DynamicBehaviorSpace(
+            bins={
+                "x": LinearBinning(
+                    min_val=0.0,
+                    max_val=10.0,
+                    num_bins=5,
+                    type="linear",
+                )
+            }
+        ),
+        max_size=None,
+        archive_selector=SumArchiveSelector(fitness_keys=["score"]),
+        archive_remover=None,
+        elite_selector=RandomEliteSelector(),
+        migrant_selector=RandomMigrantSelector(),
+    )
+
+
+def _make_engine(storage=None) -> SteadyStateEvolutionEngine:
+    if storage is None:
+        storage = AsyncMock()
+        storage.load_run_state = AsyncMock(return_value=None)
+        storage.save_run_state = AsyncMock()
+    strategy = AsyncMock()
+    writer = MagicMock()
+    writer.bind.return_value = writer
+    metrics_tracker = MagicMock()
+
+    engine = SteadyStateEvolutionEngine(
+        storage=storage,
+        strategy=strategy,
+        mutation_operator=AsyncMock(),
+        config=SteadyStateEngineConfig(),
+        writer=writer,
+        metrics_tracker=metrics_tracker,
+    )
+    engine.state = AsyncMock()
+    return engine
+
+
+# ---------------------------------------------------------------------------
+# recover_stranded_programs
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverStrandedPrograms:
+    async def test_running_programs_become_queued(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """RUNNING programs are reset to QUEUED on recovery."""
+        # add() automatically places the program in the RUNNING status set
+        p1 = _prog(ProgramState.RUNNING)
+        p2 = _prog(ProgramState.RUNNING)
+        await fakeredis_storage.add(p1)
+        await fakeredis_storage.add(p2)
+
+        recovered = await fakeredis_storage.recover_stranded_programs()
+
+        assert recovered == 2
+        assert await fakeredis_storage.count_by_status(ProgramState.RUNNING.value) == 0
+        assert await fakeredis_storage.count_by_status(ProgramState.QUEUED.value) == 2
+
+        restored = await fakeredis_storage.get(p1.id)
+        assert restored is not None
+        assert restored.state == ProgramState.QUEUED
+
+    async def test_no_running_programs_returns_zero(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """Returns 0 when there are no RUNNING programs."""
+        p = _prog(ProgramState.DONE)
+        await fakeredis_storage.add(p)
+        await fakeredis_storage.transition_status(p.id, None, ProgramState.DONE.value)
+
+        recovered = await fakeredis_storage.recover_stranded_programs()
+
+        assert recovered == 0
+
+    async def test_only_running_programs_are_affected(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """DONE/QUEUED programs are not touched."""
+        running = _prog(ProgramState.RUNNING)
+        done = _prog(ProgramState.DONE)
+        done.add_metrics({"score": 1.0})
+
+        # add() places each program into its initial status set automatically
+        await fakeredis_storage.add(running)
+        await fakeredis_storage.add(done)
+
+        await fakeredis_storage.recover_stranded_programs()
+
+        assert await fakeredis_storage.count_by_status(ProgramState.RUNNING.value) == 0
+        assert await fakeredis_storage.count_by_status(ProgramState.QUEUED.value) == 1
+        assert await fakeredis_storage.count_by_status(ProgramState.DONE.value) == 1
+
+    async def test_empty_database_returns_zero(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """Empty database returns 0."""
+        assert await fakeredis_storage.recover_stranded_programs() == 0
+
+
+# ---------------------------------------------------------------------------
+# EvolutionEngine.restore_state
+# ---------------------------------------------------------------------------
+
+
+class TestEvolutionEngineRestoreState:
+    async def test_restores_total_mutants(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """restore_state() loads stop-counter and next ordinal from Redis."""
+        snap = EngineSnapshot(total_mutants=17, next_iteration=20)
+        await fakeredis_storage.save_run_state(
+            ENGINE_SNAPSHOT_KEY, snap.model_dump_json()
+        )
+
+        engine = _make_engine(storage=fakeredis_storage)
+        assert engine.metrics.mutations_created == 0
+        assert engine.metrics.iteration == 0
+
+        await engine.restore_state()
+
+        assert engine.metrics.mutations_created == 17
+        assert engine.metrics.iteration == 20
+
+    async def test_no_saved_state_keeps_zero(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """When no state is persisted, total_mutants stays at 0."""
+        engine = _make_engine(storage=fakeredis_storage)
+        await engine.restore_state()
+        assert engine.metrics.iteration == 0
+
+    async def test_restores_programs_processed(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """restore_state() loads programs_processed from Redis."""
+        snap = EngineSnapshot(programs_processed=42)
+        await fakeredis_storage.save_run_state(
+            ENGINE_SNAPSHOT_KEY, snap.model_dump_json()
+        )
+
+        engine = _make_engine(storage=fakeredis_storage)
+        assert engine.metrics.programs_processed == 0
+
+        await engine.restore_state()
+
+        assert engine.metrics.programs_processed == 42
+
+    async def test_no_saved_programs_processed_keeps_zero(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """When no programs_processed is persisted, it stays at 0."""
+        engine = _make_engine(storage=fakeredis_storage)
+        await engine.restore_state()
+        assert engine.metrics.programs_processed == 0
+
+
+# ---------------------------------------------------------------------------
+# MapElitesMultiIsland.restore_state
+# ---------------------------------------------------------------------------
+
+
+class TestMapElitesMultiIslandRestoreState:
+    def test_rejects_shared_mutable_dynamic_space(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        first = _make_dynamic_island_config("first")
+        second = _make_dynamic_island_config("second")
+        second.behavior_space = first.behavior_space
+
+        with pytest.raises(ValueError, match="cannot be shared"):
+            MapElitesMultiIsland(
+                island_configs=[first, second],
+                program_storage=fakeredis_storage,
+                archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+            )
+
+    async def test_restores_generation_and_last_migration(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """restore_state() loads generation and last_migration from Redis."""
+        await fakeredis_storage.save_run_state(_RUN_STATE_GENERATION, 42)
+        await fakeredis_storage.save_run_state(_RUN_STATE_LAST_MIGRATION, 40)
+
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+            migration_interval=50,
+        )
+        assert strategy.generation == 0
+        assert strategy.last_migration == 0
+
+        await strategy.restore_state()
+
+        assert strategy.generation == 42
+        assert strategy.last_migration == 40
+
+    async def test_no_saved_state_keeps_defaults(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """When nothing is persisted, counters default to 0."""
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        await strategy.restore_state()
+        assert strategy.generation == 0
+        assert strategy.last_migration == 0
+
+    async def test_restores_dynamic_bounds_and_repairs_archive_cells(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """Persisted cell keys and live dynamic bounds resume as one state."""
+
+        first = Program(code="def first(): return 1", state=ProgramState.DONE)
+        first.add_metrics({"score": 1.0, "x": 2.0})
+        second = Program(code="def second(): return 2", state=ProgramState.DONE)
+        second.add_metrics({"score": 2.0, "x": 8.0})
+        rejected = Program(code="def rejected(): return 0", state=ProgramState.DONE)
+        rejected.add_metrics({"score": -100.0, "x": 1.39})
+        await fakeredis_storage.add(first)
+        await fakeredis_storage.add(second)
+        await fakeredis_storage.add(rejected)
+
+        initial = MapElitesMultiIsland(
+            island_configs=[_make_dynamic_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        assert await initial.islands["dynamic"].add(first)
+        assert await initial.islands["dynamic"].add(second)
+        # A rejected out-of-range candidate can still expand live bounds. Those
+        # exact bounds cannot be reconstructed from elites alone.
+        assert not await initial.islands["dynamic"].add(rejected)
+        live_space = initial.islands["dynamic"].config.behavior_space
+        live_bounds = {
+            key: (binning.min_val, binning.max_val)
+            for key, binning in live_space.bins.items()
+        }
+        live_cells = {
+            program.id: live_space.get_cell(program.metrics)
+            for program in (first, second)
+        }
+
+        resumed = MapElitesMultiIsland(
+            island_configs=[_make_dynamic_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        resumed_island = resumed.islands["dynamic"]
+        fresh_space = resumed_island.config.behavior_space
+        assert fresh_space.get_cell(first.metrics) != live_cells[first.id]
+
+        await resumed.restore_state()
+
+        assert {
+            key: (binning.min_val, binning.max_val)
+            for key, binning in fresh_space.bins.items()
+        } == live_bounds
+        for program in (first, second):
+            cell = fresh_space.get_cell(program.metrics)
+            elite = await resumed_island.archive_storage.get_elite(cell)
+            assert elite is not None
+            assert elite.id == program.id
+
+    async def test_auto_route_commits_dynamic_rebin_atomically(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        first = Program(code="def first(): return 1", state=ProgramState.DONE)
+        first.add_metrics({"score": 10.0, "x": 4.0})
+        second = Program(code="def second(): return 2", state=ProgramState.DONE)
+        second.add_metrics({"score": 20.0, "x": 6.0})
+        candidate = Program(code="def candidate(): return 3", state=ProgramState.DONE)
+        candidate.add_metrics({"score": 30.0, "x": 3.79})
+        for program in (first, second, candidate):
+            await fakeredis_storage.add(program)
+
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_dynamic_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        island = strategy.islands["dynamic"]
+        assert await strategy.add(first, island_id="dynamic")
+        assert await strategy.add(second, island_id="dynamic")
+        bounds_before = island._live_bounds()
+
+        assert await strategy.add(candidate)
+
+        assert island._live_bounds() != bounds_before
+        assert (
+            await fakeredis_storage.load_run_state_str(island._dynamic_space_state_key)
+            is not None
+        )
+        for elite in await island.get_elites():
+            stored = await island.archive_storage.get_elite(
+                island.config.behavior_space.get_cell(elite.metrics)
+            )
+            assert stored is not None and stored.id == elite.id
+
+    async def test_generation_is_saved_after_select_elites(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """After select_elites returns results, generation is persisted."""
+        p = _prog(ProgramState.DONE)
+        await fakeredis_storage.add(p)
+        await fakeredis_storage.transition_status(p.id, None, ProgramState.DONE.value)
+
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        # Populate the island archive so select_elites returns something
+        added = await strategy.islands["test"].add(p)
+        assert added
+
+        elites = await strategy.select_elites(total=8)
+        assert len(elites) > 0
+
+        saved = await fakeredis_storage.load_run_state(_RUN_STATE_GENERATION)
+        assert saved == 1
+
+    async def test_generation_not_saved_when_no_elites(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """When select_elites returns nothing, generation is not incremented or saved."""
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        await strategy.select_elites(total=8)
+
+        saved = await fakeredis_storage.load_run_state(_RUN_STATE_GENERATION)
+        assert saved is None  # never written
+
+    async def test_generation_continues_after_restore(
+        self, fakeredis_storage, archive_storage_factory
+    ) -> None:
+        """A resumed strategy increments from the restored generation value."""
+        await fakeredis_storage.save_run_state(_RUN_STATE_GENERATION, 7)
+
+        p = _prog(ProgramState.DONE)
+        await fakeredis_storage.add(p)
+        await fakeredis_storage.transition_status(p.id, None, ProgramState.DONE.value)
+
+        strategy = MapElitesMultiIsland(
+            island_configs=[_make_island_config()],
+            program_storage=fakeredis_storage,
+            archive_storage_factory=RedisArchiveStorageFactory(fakeredis_storage),
+        )
+        await strategy.restore_state()
+        assert strategy.generation == 7
+
+        added = await strategy.islands["test"].add(p)
+        assert added
+
+        await strategy.select_elites(total=8)
+
+        assert strategy.generation == 8
+        saved = await fakeredis_storage.load_run_state(_RUN_STATE_GENERATION)
+        assert saved == 8

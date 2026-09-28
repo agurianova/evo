@@ -1,0 +1,33 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-hazelnut-spread-contaminant-detection)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] s12         numeric
+- [1] s13         numeric
+- [2] s14         numeric
+- [3] s15         numeric
+- [4] s16         numeric
+- [5] s21         numeric
+- [6] s23         numeric
+- [7] s24         numeric
+- [8] s25         numeric
+- [9] s26         numeric
+- [10] s31         numeric
+- [11] s32         numeric
+- [12] s34         numeric
+- [13] s35         numeric
+- [14] s36         numeric
+- [15] s41         numeric
+- [16] s42         numeric
+- [17] s43         numeric
+- [18] s45         numeric
+- [19] s46         numeric
+- [20] s51         numeric
+- [21] s52         numeric
+- [22] s53         numeric
+- [23] s54         numeric
+- [24] s56         numeric
+- [25] s61         numeric
+- [26] s62         numeric
+- [27] s63         numeric
+- [28] s64         numeric
+- [29] s65         numeric

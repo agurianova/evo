@@ -1,0 +1,9 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-fitness-club)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] months_as_member numeric
+- [1] weight      numeric
+- [2] days_before numeric
+- [3] day_of_week categorical (integer code), 7 levels: 0=Fri 1=Mon 2=Sat 3=Sun 4=Thu 5=Tue 6=Wed
+- [4] time        categorical (integer code), 2 levels: 0=AM 1=PM
+- [5] category    categorical (integer code), 6 levels: 0=- 1=Aqua 2=Cycling 3=HIIT 4=Strength 5=Yoga

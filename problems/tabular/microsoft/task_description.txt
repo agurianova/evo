@@ -1,0 +1,7 @@
+TASK — TABULAR REGRESSION (microsoft)
+
+DATASET — MSLR-WEB10K learning-to-rank; each row is a query-document pair, predict the relevance grade (0-4) from ~136 anonymized ranking-signal features
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-130]    numeric
+- [131-135]  binary (0/1)

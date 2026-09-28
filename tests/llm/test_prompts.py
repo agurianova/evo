@@ -1,0 +1,125 @@
+"""Tests for gigaevo/prompts/__init__.py — load_prompt and Prompts accessor classes."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from gigaevo.prompts import (
+    InsightsPrompts,
+    LineagePrompts,
+    load_prompt,
+)
+
+# ---------------------------------------------------------------------------
+# load_prompt — core function
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPrompt:
+    @pytest.mark.parametrize(
+        "agent,prompt_type",
+        [
+            (agent, ptype)
+            for agent in ("mutation", "insights", "lineage")
+            for ptype in ("system", "user")
+        ],
+    )
+    def test_default_prompts_load_non_empty(self, agent: str, prompt_type: str):
+        """Every shipped default prompt file loads as a non-empty string."""
+        template = load_prompt(agent, prompt_type)
+        assert isinstance(template, str) and len(template) > 0
+
+    def test_result_is_stripped(self):
+        """load_prompt strips leading/trailing whitespace from file content."""
+        template = load_prompt("mutation", "system")
+        assert template == template.strip()
+
+    def test_missing_prompt_raises_file_not_found(self):
+        with pytest.raises(FileNotFoundError, match="Prompt not found"):
+            load_prompt("nonexistent_agent", "system")
+
+    def test_missing_prompt_type_raises_file_not_found(self):
+        with pytest.raises(FileNotFoundError):
+            load_prompt("mutation", "nonexistent_type")
+
+    # custom prompts_dir —————————————————————————————————————————————————
+
+    def test_custom_dir_overrides_default(self, tmp_path: Path):
+        custom_dir = tmp_path / "mutation"
+        custom_dir.mkdir()
+        (custom_dir / "system.txt").write_text("custom system prompt")
+        result = load_prompt("mutation", "system", prompts_dir=tmp_path)
+        assert result == "custom system prompt"
+
+    def test_custom_dir_strips_whitespace(self, tmp_path: Path):
+        custom_dir = tmp_path / "mutation"
+        custom_dir.mkdir()
+        (custom_dir / "system.txt").write_text("  trimmed  \n")
+        result = load_prompt("mutation", "system", prompts_dir=tmp_path)
+        assert result == "trimmed"
+
+    def test_custom_dir_falls_back_to_default_if_file_missing(self, tmp_path: Path):
+        """Custom dir given but file missing → falls back to package default."""
+        result = load_prompt("mutation", "system", prompts_dir=tmp_path)
+        default = load_prompt("mutation", "system")
+        assert result == default
+
+    def test_custom_dir_does_not_affect_other_agents(self, tmp_path: Path):
+        """Custom dir with a file for mutation doesn't affect insights."""
+        (tmp_path / "mutation").mkdir()
+        (tmp_path / "mutation" / "system.txt").write_text("custom")
+        insights = load_prompt("insights", "system", prompts_dir=tmp_path)
+        default_insights = load_prompt("insights", "system")
+        assert insights == default_insights
+
+    def test_prompts_dir_as_string(self, tmp_path: Path):
+        """prompts_dir can be a plain str (not just Path)."""
+        custom_dir = tmp_path / "mutation"
+        custom_dir.mkdir()
+        (custom_dir / "system.txt").write_text("str path prompt")
+        result = load_prompt("mutation", "system", prompts_dir=str(tmp_path))
+        assert result == "str path prompt"
+
+
+# ---------------------------------------------------------------------------
+# InsightsPrompts
+# ---------------------------------------------------------------------------
+
+
+class TestInsightsPrompts:
+    def test_system_returns_non_empty_string(self):
+        assert isinstance(InsightsPrompts.system(), str)
+
+    def test_user_returns_non_empty_string(self):
+        assert isinstance(InsightsPrompts.user(), str)
+
+    def test_custom_dir_fallback(self, tmp_path: Path):
+        """No custom file → falls back to package default."""
+        default = InsightsPrompts.system()
+        result = InsightsPrompts.system(prompts_dir=tmp_path)
+        assert result == default
+
+    def test_custom_dir_override(self, tmp_path: Path):
+        (tmp_path / "insights").mkdir()
+        (tmp_path / "insights" / "system.txt").write_text("insights override")
+        assert InsightsPrompts.system(prompts_dir=tmp_path) == "insights override"
+
+
+# ---------------------------------------------------------------------------
+# LineagePrompts
+# ---------------------------------------------------------------------------
+
+
+class TestLineagePrompts:
+    def test_system_returns_non_empty_string(self):
+        assert isinstance(LineagePrompts.system(), str)
+
+    def test_user_returns_non_empty_string(self):
+        assert isinstance(LineagePrompts.user(), str)
+
+    def test_custom_dir_override(self, tmp_path: Path):
+        (tmp_path / "lineage").mkdir()
+        (tmp_path / "lineage" / "user.txt").write_text("lineage user override")
+        assert LineagePrompts.user(prompts_dir=tmp_path) == "lineage user override"

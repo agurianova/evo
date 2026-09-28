@@ -1,0 +1,4 @@
+TASK — TABULAR REGRESSION (regression-num-medium-1-isolet)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-612]    numeric

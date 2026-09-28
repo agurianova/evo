@@ -1,0 +1,21 @@
+# @package _global_
+
+# Full Featured Experiment
+# Multi-island evolution with multiple LLMs and complexity tracking
+# Explores both high-performance and simple solutions
+
+defaults:
+  - /constants: base
+  - /redis: default
+  - /llm: heterogeneous
+  - /prompts: default
+  - /evolution: default
+  - /metrics: code_complexity  # Required by multi_island
+  - /algorithm: multi_island
+  - /mutation: llm_rewrite
+  - /pipeline: guided
+  - /runner: default
+  - /loader: directory
+  - /logging: tensorboard
+  # This preset is multi-parent and therefore outside memory-v2's causal scope.
+  - /memory: none

@@ -1,0 +1,18 @@
+TASK — TABULAR REGRESSION (tabarena-miami-housing)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] LATITUDE    numeric
+- [1] LONGITUDE   numeric
+- [2] LND_SQFOOT  numeric
+- [3] TOT_LVG_AREA numeric
+- [4] SPEC_FEAT_VAL numeric
+- [5] RAIL_DIST   numeric
+- [6] OCEAN_DIST  numeric
+- [7] WATER_DIST  numeric
+- [8] CNTR_DIST   numeric
+- [9] SUBCNTR_DI  numeric
+- [10] HWY_DIST    numeric
+- [11] age         numeric
+- [12] month_sold  numeric
+- [13] structure_quality numeric
+- [14] avno60plus  categorical (integer code), 2 levels: 0=0.0 1=1.0

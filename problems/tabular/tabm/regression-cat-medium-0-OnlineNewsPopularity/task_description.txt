@@ -1,0 +1,5 @@
+TASK — TABULAR REGRESSION (regression-cat-medium-0-OnlineNewsPopularity)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0-44]     numeric
+- [45-58]    binary (0/1)

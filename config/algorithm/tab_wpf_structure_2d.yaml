@@ -1,0 +1,55 @@
+# @package _global_
+# Structural MAP-Elites for PredictorDAGs.  Integer-aligned bins preserve one
+# elite for each reachable (node count, dependency depth) shape; fitness still
+# decides replacement within a cell.
+
+defaults:
+  - _base
+
+behavior_space:
+  _target_: gigaevo.config.helpers.build_behavior_space
+  keys:
+    - graph_node_count
+    - graph_max_depth
+  bounds:
+    - [-0.5, 12.5]
+    - [-0.5, 12.5]
+  resolutions:
+    - 13
+    - 13
+  binning_types:
+    - ${binning_type}
+    - ${binning_type}
+  dynamic: false
+
+islands:
+  - _target_: gigaevo.evolution.strategies.map_elites.IslandConfig
+    island_id: ${island_id}
+    # Reachable shapes are (0,0) plus 1 <= depth <= node_count <= 12:
+    # 1 + sum(1..12) = 79 cells.
+    max_size: 79
+    behavior_space: ${ref:behavior_space}
+    archive_selector: ${archive_selector}
+    elite_selector:
+      _target_: gigaevo.evolution.strategies.map_elites.FitnessProportionalTournamentBoundedGapEliteSelector
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+      gap_factor: 1.5
+    archive_remover:
+      _target_: gigaevo.evolution.strategies.map_elites.FitnessArchiveRemover
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+    migrant_selector:
+      _target_: gigaevo.evolution.strategies.map_elites.TopFitnessMigrantSelector
+      fitness_key: ${primary_key}
+      fitness_key_higher_is_better: ${higher_is_better}
+    migration_rate: ${migration_rate}
+
+evolution_strategy:
+  _target_: gigaevo.evolution.strategies.map_elites.MapElitesMultiIsland
+  island_configs: ${islands}
+  program_storage: ${ref:program_storage}
+  archive_storage_factory: ${ref:archive_storage_factory}
+  migration_interval: ${migration_interval}
+  enable_migration: ${enable_migration}
+  max_migrants_per_island: ${max_migrants_per_island}

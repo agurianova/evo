@@ -1,0 +1,13 @@
+TASK — TABULAR REGRESSION (california)
+
+DATASET — California Housing (1990 census block groups); predict median house value in units of $100k, capped at 5.0
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] MedInc      median income of households in the block group (units of $10k)
+- [1] HouseAge    median house age in the block group (years)
+- [2] AveRooms    average rooms per household
+- [3] AveBedrms   average bedrooms per household
+- [4] Population  block-group population (count)
+- [5] AveOccup    average occupants per household
+- [6] Latitude    block-group latitude (degrees, ~32.5 to 42.0)
+- [7] Longitude   block-group longitude (degrees, ~-124.3 to -114.3)

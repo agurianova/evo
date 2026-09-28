@@ -1,0 +1,12 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-amazon-employee-access)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] RESOURCE    categorical (integer code), 4049 levels: 0=0 1=100003 2=100037 3=100039 4=1001 5=1003 ... 4048=99989
+- [1] MGR_ID      categorical (integer code), 3097 levels: 0=100 1=100062 2=100147 3=10038 4=100547 5=10079 ... 3096=99669
+- [2] ROLE_ROLLUP_1 categorical (integer code), 121 levels: 0=11146 1=117876 2=117882 3=117887 4=117890 5=117893 ... 120=91261
+- [3] ROLE_ROLLUP_2 categorical (integer code), 163 levels: 0=117877 1=117883 2=117891 3=117894 4=117903 5=117911 ... 162=32137
+- [4] ROLE_DEPTNAME categorical (integer code), 412 levels: 0=117878 1=117884 2=117895 3=117904 4=117912 5=117920 ... 411=81476
+- [5] ROLE_TITLE  categorical (integer code), 297 levels: 0=117879 1=117885 2=117896 3=117899 4=117905 5=117946 ... 296=311867
+- [6] ROLE_FAMILY_DESC categorical (integer code), 1628 levels: 0=117879 1=117886 2=117897 3=117899 4=117905 5=117906 ... 1627=4673
+- [7] ROLE_FAMILY categorical (integer code), 64 levels: 0=117887 1=118131 2=118205 3=118295 4=118331 5=118347 ... 63=6725
+- [8] ROLE_CODE   categorical (integer code), 297 levels: 0=117880 1=117888 2=117898 3=117900 4=117908 5=117948 ... 296=270691

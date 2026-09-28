@@ -1,0 +1,11 @@
+TASK — TABULAR REGRESSION (tabarena-houses)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] MedianIncome numeric
+- [1] HousingMedianAge numeric
+- [2] TotalRooms  numeric
+- [3] TotalBedrooms numeric
+- [4] Population  numeric
+- [5] Households  numeric
+- [6] Latitude    numeric
+- [7] Longitude   numeric

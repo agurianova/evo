@@ -1,0 +1,89 @@
+from __future__ import annotations
+
+from functools import cache
+from pathlib import Path
+import re
+
+from gigaevo.problems.context import ProblemContext
+from problems.tabular._common import tabular_data
+
+_SECTION_PATTERN = re.compile(
+    r"^(TASK|DATASET|COLUMNS|CONTRACT|PROTOCOL|STRATEGY|CONSTRAINTS)\b.*$",
+    re.MULTILINE,
+)
+
+
+def _extract_dataset_context(text: str) -> str:
+    sections: dict[str, str] = {}
+    matches = list(_SECTION_PATTERN.finditer(text))
+    for index, match in enumerate(matches):
+        start = match.start()
+        stop = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[match.group(1)] = text[start:stop].strip()
+
+    selected = [
+        sections[name] for name in ("TASK", "DATASET", "COLUMNS") if name in sections
+    ]
+    if not selected:
+        raise ValueError(
+            "tabular task description has no TASK, DATASET, or COLUMNS sections"
+        )
+    return "\n\n".join(selected)
+
+
+@cache
+def _dataset_description_path(tabular_root: Path, dataset: str) -> Path | None:
+    direct = tabular_root / dataset / "task_description.txt"
+    if direct.is_file():
+        return direct
+    for marker in sorted(tabular_root.glob("*/*/dataset_id.txt")):
+        if marker.read_text().strip() == dataset:
+            description = marker.parent / "task_description.txt"
+            if description.is_file():
+                return description
+    return None
+
+
+class DagTabProblemContext(ProblemContext):
+    """FeatureGraph ABI combined with the selected tabular dataset semantics."""
+
+    def __init__(self, problem_dir: str | Path, dataset: str = "california"):
+        super().__init__(problem_dir)
+        self.dataset = dataset
+
+    def _tabular_root(self) -> Path:
+        """Locate canonical tabular datasets from top-level or nested problems."""
+        for ancestor in (self.problem_dir, *self.problem_dir.parents):
+            candidate = ancestor / "tabular"
+            if candidate.is_dir():
+                return candidate
+        raise FileNotFoundError(
+            f"Missing canonical tabular problem root above {self.problem_dir}"
+        )
+
+    @property
+    def task_description(self) -> str:
+        abi = super().task_description
+        dataset_path = _dataset_description_path(self._tabular_root(), self.dataset)
+        if dataset_path is not None:
+            dataset_context = _extract_dataset_context(dataset_path.read_text())
+        else:
+            dataset = tabular_data.load_dataset(self.dataset)
+            task = {
+                tabular_data.REGRESSION: "TABULAR REGRESSION",
+                tabular_data.BINCLASS: "TABULAR BINARY CLASSIFICATION",
+                tabular_data.MULTICLASS: "TABULAR MULTICLASS CLASSIFICATION",
+            }[dataset.task_type]
+            dataset_context = (
+                f"TASK — {task} ({self.dataset})\n\n"
+                f"{tabular_data.describe_columns(self.dataset)}"
+            )
+        return (
+            f"{abi}\n\n"
+            "SELECTED DATASET CONTEXT\n"
+            f"dataset id: {self.dataset}\n"
+            "Column indices [j] below map exactly to FeatureGraph names xj. "
+            "Use the supplied semantics when present; do not invent semantics for "
+            "anonymized columns.\n\n"
+            f"{dataset_context}"
+        )

@@ -1,0 +1,11 @@
+TASK — TABULAR REGRESSION (tabarena-concrete-compressive-strength)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Cement      numeric
+- [1] BlastFurnaceSlag numeric
+- [2] FlyAsh      numeric
+- [3] Water       numeric
+- [4] Superplasticizer numeric
+- [5] CoarseAggregate numeric
+- [6] FineAggregate numeric
+- [7] Age         numeric

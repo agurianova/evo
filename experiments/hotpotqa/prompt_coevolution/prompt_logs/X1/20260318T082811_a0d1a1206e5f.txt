@@ -1,0 +1,534 @@
+=== PROMPT DUMP 20260318T082811 ===
+prompt_id: a0d1a1206e5f65ba
+
+=== SYSTEM PROMPT ===
+You are an expert in evolutionary optimization of HotpotQA prompt-chain programs.
+
+OBJECTIVE:
+CHAIN EVOLUTION
+You are evolving a multi-step reasoning chain defined with structured fields.
+Each LLM step is specified by semantic fields (aim, stage_action, etc.) that are
+automatically assembled into prompts — you do not write raw prompt text. You control
+the structured-field content and the chain-level system_prompt.
+
+Consider the next guidelines:
+1) Chain optimization is a high-dimensional, experimental design problem. Each LLM step's
+   structured fields may combine:
+   - Reasoning scaffolds: explicit step-by-step thinking, sub-problem decomposition
+   - Role & context framing: role definition, domain setup, goal specification, success criteria
+   - Instruction precision: task boundaries, structural directives
+   - In-context exemplars: input-output examples, pattern demonstrations
+   - Constraints: output schema, formatting rules
+   Additionally, multi-step chains require attention to:
+   - Step coordination: each step should produce output shaped for its downstream consumers
+   - Information flow: pass only relevant information forward to avoid context dilution
+   - Role specialization: each step should have a clear, focused responsibility
+2) Structured fields of LLM steps:
+   - "aim" (REQUIRED, non-empty): Primary objective of this step
+   - "stage_action" (REQUIRED, non-empty): Specific action to perform
+   - "reasoning_questions" (optional): Key questions to answer
+   - "example_reasoning" (optional): Example of expert reasoning
+   These fields are assembled into a full LLM prompt for each step. The assembly
+   order (top to bottom):
+
+     [If system_prompt is non-empty]
+     System Instructions:
+     {system_prompt}
+
+     Data:
+     {outer_context}              ← initial user input
+
+     [If step has dependencies]
+     Previous steps:
+     Step N. Title
+     Result: <output>
+     ...
+     Based on the results of previous steps, perform the following task:
+     Step {number}. {title}
+     Objective: {aim}
+     Task: {stage_action}
+     Questions: {reasoning_questions}
+     Example reasoning: {example_reasoning}
+
+   Key points:
+   - system_prompt is shared — prepended to every LLM step
+   - outer_context wraps every LLM step as "Data:\n{outer_context}"
+   - Dependencies list controls which prior step outputs are visible
+3) Implementation details:
+   - entrypoint() returns a dict with "system_prompt" (str, may be empty) and "steps" (list of dicts)
+   - Each step dict has metadata fields: number, title, step_type, dependencies
+   - LLM steps carry the four structured fields above; tool steps carry step_config
+   - Tool steps use $-reference syntax in input_mapping:
+       $outer_context — the original sample context string
+       $history[-1] — output of the immediately preceding step
+       $history[N] — output of step at index N (0-based)
+
+STEP TYPES
+The chain supports two step types:
+- "llm": LLM reasoning step with structured fields (aim, stage_action, reasoning_questions,
+  example_reasoning). The LLM receives the assembled prompt and produces a text response.
+- "tool": Tool execution step with step_config. Currently available tool:
+    "retrieve" — BM25 retrieval over Wikipedia abstracts. Returns top-k passages
+    formatted as "[i] Title | sentence1 sentence2 ...".
+    Usage in step_config: {"tool_name": "retrieve", "input_mapping": {"query": "$reference"}}
+    Where $reference is one of: $outer_context, $history[-1], $history[N]
+
+EVOLUTION MODE — STATIC
+The chain topology (step count, types, dependencies) is fixed. Only the structured field
+content of non-frozen LLM steps and the chain-level system_prompt are evolvable.
+Frozen steps must match the baseline exactly and cannot be modified.
+Each step dict additionally includes a "frozen" metadata field (True/False).
+
+TASK DEFINITION — MULTI-HOP QUESTION ANSWERING
+
+Challenge: Design a chain that maximizes token-level F1 accuracy on multi-hop reasoning questions.
+
+OBJECTIVE
+Return a chain specification guiding the downstream LLM such that:
+ 1) All chain steps are valid and well-defined
+ 2) The chain guides the LLM through multi-hop reasoning using retrieval and synthesis
+ 3) The final step returns a clear, extractable answer in "Answer: <answer>" format
+ 4) Maximizes token-level F1 accuracy between predicted and gold answers (SQuAD-style)
+
+FITNESS METRIC: Token-level F1 (not Exact Match). Partial credit is awarded for predictions
+that share tokens with the gold answer — e.g., predicting "New York City" for gold "New York"
+scores F1=0.80 rather than 0. Focus on producing answers that contain the correct content
+tokens, not necessarily identical surface forms.
+
+Output: 'Answer: <answer>' (extractable by regex) | Goal: Token-level F1 > 0.7
+
+PIPELINE COMPONENTS
+- LLM: Model with basic multi-hop reasoning capabilities
+- Retrieval: BM25 over Wikipedia abstracts via the "retrieve" tool; returns top-k passages
+  formatted as "[i] Title | sentence1 sentence2 ..."
+
+CHAIN STRUCTURE — FIXED 6-STEP TOPOLOGY
+
+Step 1 (TOOL) — "Retrieve first-hop passages"
+  Type: tool | Dependencies: [] | Frozen: Yes
+  Purpose: Retrieve Wikipedia passages using the question as query.
+  Config: tool_name="retrieve", input_mapping={"query": "$outer_context"}
+
+Step 2 (LLM) — "Summarize first-hop passages"
+  Type: llm | Dependencies: [1] | Frozen: No
+  Purpose: Extract key facts from the retrieved passages relevant to the question.
+
+Step 3 (LLM) — "Generate second-hop query"
+  Type: llm | Dependencies: [2] | Frozen: No
+  Purpose: Identify missing information and generate a focused second-hop search query.
+
+Step 4 (TOOL) — "Retrieve second-hop passages"
+  Type: tool | Dependencies: [3] | Frozen: Yes
+  Purpose: Retrieve additional passages using the generated query.
+  Config: tool_name="retrieve", input_mapping={"query": "$history[-1]"}
+
+Step 5 (LLM) — "Combine evidence"
+  Type: llm | Dependencies: [2, 4] | Frozen: No
+  Purpose: Integrate first-hop summary with second-hop passages into unified evidence.
+
+Step 6 (LLM) — "Final answer"
+  Type: llm | Dependencies: [2, 5] | Frozen: No
+  Purpose: Synthesize all evidence and produce the final answer.
+
+GENOME FORMAT
+entrypoint() must return a dict:
+{
+    "system_prompt": "string — shared instruction prepended to every LLM step",
+    "steps": [
+        {   # Step 1 (tool — frozen, must match exactly)
+            "number": 1,
+            "title": "Retrieve first-hop passages",
+            "step_type": "tool",
+            "dependencies": [],
+            "frozen": True,
+            "step_config": {
+                "tool_name": "retrieve",
+                "input_mapping": {"query": "$outer_context"},
+            },
+        },
+        {   # Step 2 (LLM)
+            "number": 2,
+            "title": "Summarize first-hop passages",
+            "step_type": "llm",
+            "aim": "required — step objective",
+            "stage_action": "required — what the LLM should do",
+            "reasoning_questions": "optional — guiding questions",
+            "example_reasoning": "optional — example thought process",
+            "dependencies": [1],
+            "frozen": False,
+        },
+        ...  # Steps 3-6 follow the same pattern
+    ],
+}
+
+CONSTRAINTS
+- LLM steps require non-empty "aim" and "stage_action" fields
+- Dependencies must reference only earlier steps (by number)
+- No dependency cycles
+- The final LLM step must guide the LLM to output "Answer: <answer>"
+- Steps list must have exactly 6 entries
+- Step types and dependencies must match the fixed topology
+- Frozen steps (1 and 4) must match the baseline exactly
+
+FAILURE MODES
+- Missing or empty required fields (aim, stage_action for LLM steps)
+- Dependency cycles or references to non-existent/later steps
+- Final step not producing extractable "Answer: ..." output
+- Wrong number of steps or type/deps mismatch with fixed topology
+- Frozen step content differs from baseline
+
+OUTPUT FORMAT
+Implement `def entrypoint()` that returns:
+- A dict with "system_prompt" (str) and "steps" (list of step dicts)
+- Each step dict has metadata fields (number, title, step_type, dependencies)
+- LLM steps have structured fields (aim, stage_action, reasoning_questions, example_reasoning)
+- LLM return format for final step: 'Answer: <answer>' (extractable by regex)
+- Each step dict includes "frozen" field (True/False)
+
+TASK HINTS
+- Keep prompts focused on each step's specific role
+- Query generation steps should instruct the LLM to output only the search query, avoiding extraneous text that confuses the retriever
+
+AVAILABLE METRICS:
+- fitness: Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection. (↑ better; [0.0, 1.0] range)
+- avg_extraction_failures: Average fraction of samples where answer extraction failed (↓ better; [0.0, 1.0] range)
+- is_valid: Whether the program is valid (1 valid, 0 invalid) (↑ better; [0.0, 1.0] range)
+
+---
+
+MUTATION PRINCIPLES — HOTPOTQA DOMAIN CONSTRAINTS:
+1. Step 3 is critical: Output MUST be raw BM25 query terms ONLY (no prose).
+2. Step-specific constraints:
+   - Step 2: Concise summary (max 3 sentences), key facts only
+   - Step 3: Output ONLY query terms (e.g., 'Marie Curie nationality')
+   - Step 5: Consolidate evidence in structured format (e.g., table)
+   - Step 6: Final answer format 'Answer: <answer>'
+3. Shorter prompts: Prefer explicit constraints over explanations
+4. Evidence-driven: Fix specific broken steps identified in failure analysis
+
+=== USER PROMPT ===
+
+Mutate the parent program(s) with strict adherence to critical constraints and failure diagnosis.
+
+Before writing code:
+1. Diagnose failure type from failure analysis (if provided):
+   - If missing gold docs (retrieval failure): focus on step 3 and enforce keyword-only query generation.
+   - If gold docs present but wrong answer (reasoning failure): focus on steps 5-6.
+2. Check lineage for strategies that successfully fixed the diagnosed failure type.
+3. Apply changes while strictly enforcing step 3 constraints (if applicable).
+
+Return JSON with keys: "archetype", "justification", "insights_used", "code".
+The "code" field must contain only valid Python code (no markdown fences).
+
+=== Parent 1 ===
+```python
+def entrypoint():
+    return {
+        "system_prompt": "Preserve original tokens. Never paraphrase. For yes/no: single word. Output ONLY: Answer: <answer>",
+        "steps": [
+            # Step 1: First-hop retrieval (frozen tool step)
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+                "frozen": True,
+            },
+            # Step 2: Summarize first-hop passages
+            {
+                "number": 2,
+                "title": "Summarize key facts from passages.",
+                "step_type": "llm",
+                "aim": "Identify minimal essential entities and attributes directly answering the question.",
+                "stage_action": (
+                    "Extract ONLY: (1) entities from question and passages, "
+                    "(2) known attributes as 'entity: attribute=value' pairs, "
+                    "(3) missing information as 'missing: attribute of entity'. "
+                    "Always resolve entity ambiguity using contextual clues from passages. "
+                    "Omit irrelevant sections. Format: entities: [list]; attributes: [list]; missing: [list]"
+                ),
+                "reasoning_questions": "Which entities are question-critical? What attributes are known? What specific missing information connects to the answer?",
+                "example_reasoning": (
+                    "Example 1:\n"
+                    "Question: Which documentary film was released first, 'Seal Island' or 'Paper Clips'?\n"
+                    "Passages: [1] Paper Clips (film) | Paper Clips is a 2004 documentary film. [2] Seal Island (film) | Seal Island is a 1948 documentary film.\n"
+                    "Output:\n"
+                    "entities: Paper Clips, Seal Island\n"
+                    "attributes: Paper Clips release year=2004, Seal Island release year=1948\n"
+                    "missing: \n\n"
+                    "Example 2:\n"
+                    "Question: What is the height of Mount Dandenong?\n"
+                    "Passages: [1] Belgrave Heights Christian School | located in the Dandenong Ranges\n"
+                    "Output:\n"
+                    "entities: Mount Dandenong\n"
+                    "attributes: \n"
+                    "missing: height of Mount Dandenong\n\n"
+                    "Example 3 (ambiguous entity):\n"
+                    "Question: What is the fruit called 'apple'?\n"
+                    "Passages: [1] Apple Inc. | technology company\n"
+                    "[2] Apple | a fruit of the species Malus domestica\n"
+                    "Output:\n"
+                    "entities: apple (fruit), Apple Inc.\n"
+                    "attributes: Apple Inc. is a technology company, apple (fruit) is from Malus domestica\n"
+                    "missing: common name of apple (fruit)"
+                ),
+                "dependencies": [1],
+                "frozen": False,
+            },
+            # Step 3: Generate second-hop query
+            {
+                "number": 3,
+                "title": "Generate second-hop query.",
+                "step_type": "llm",
+                "aim": "Generate precise Wikipedia-targeted query for missing information.",
+                "stage_action": (
+                    "Write ONLY the minimal search query string. Always include main entity and attribute. "
+                    "For ambiguous entities, add disambiguating context (e.g., 'apple fruit' vs 'Apple Inc.')."
+                ),
+                "reasoning_questions": "What is the single most important missing fact? How would Wikipedia title this topic? If multiple missing attributes exist, prioritize the most answer-critical one.",
+                "example_reasoning": (
+                    "Example 1:\n"
+                    "Summary:\n"
+                    "entities: Paper Clips, Seal Island\n"
+                    "attributes: Paper Clips release year=2004, Seal Island release year=1948\n"
+                    "missing: \n\n"
+                    "Paper Clips Seal Island release year comparison\n\n"
+                    "Example 2:\n"
+                    "Summary:\n"
+                    "entities: Mount Dandenong\n"
+                    "attributes: \n"
+                    "missing: height of Mount Dandenong\n"
+                    "Mount Dandenong elevation meters\n\n"
+                    "Example 3:\n"
+                    "Summary:\n"
+                    "entities: STS-7\n"
+                    "attributes: \n"
+                    "missing: first American woman astronaut of STS-7\n"
+                    "STS-7 first American woman astronaut\n\n"
+                    "Example 4 (ambiguous entity):\n"
+                    "Summary:\n"
+                    "entities: apple (fruit), Apple Inc.\n"
+                    "attributes: Apple Inc. is a technology company, apple (fruit) is from Malus domestica\n"
+                    "missing: common name of apple (fruit)\n"
+                    "apple fruit common name\n\n"
+                    "Poor query examples (avoid):\n"
+                    "- 'What is the height of Mount Dandenong?'\n"
+                    "- 'Can you tell me the first American woman astronaut of STS-7?'\n"
+                    "These are verbose and confuse the retriever. Always output ONLY the minimal query string."
+                ),
+                "dependencies": [2],
+                "frozen": False,
+            },
+            # Step 4: Second-hop retrieval (frozen tool step)
+            {
+                "number": 4,
+                "title": "Retrieve second-hop passages.",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [3],
+                "frozen": True,
+            },
+            # Step 5: Combine evidence
+            {
+                "number": 5,
+                "title": "Combine evidence",
+                "step_type": "llm",
+                "aim": "Create conflict-resolved evidence set for answer synthesis.",
+                "stage_action": (
+                    "Convert to factual statements using verbatim text from passages: [entity] [attribute]: [value]. "
+                    "Rank evidence by: exact entity match (weight=3), attribute proximity (weight=2), sentence position (weight=1). "
+                    "For contradictions, prefer highest weighted source; if equal, prefer most recent date. "
+                    "Output ONLY numbered factual statements in ranked order (best first), no provenance or interpretation."
+                ),
+                "reasoning_questions": "Which facts directly answer the question? How closely does the passage mention the target entity?",
+                "example_reasoning": (
+                    "Example:\n"
+                    "Step 2 Summary:\n"
+                    "entities: Mount Dandenong\n"
+                    "missing: height of Mount Dandenong\n"
+                    "Step 4 Passages:\n"
+                    "[1] Mount Dandenong | Mount Dandenong is 633 meters high. (2010)\n"
+                    "[2] Dandenong Ranges | The highest peak is 633 meters. (2020)\n"
+                    "Output:\n"
+                    "1. Mount Dandenong height: 633 meters\n\n"
+                    "Contradictory example:\n"
+                    "Step 2 Summary:\n"
+                    "entities: Mount Dandenong\n"
+                    "missing: height of Mount Dandenong\n"
+                    "Step 4 Passages:\n"
+                    "[1] Mount Dandenong | Mount Dandenong is 633 meters high. (2010)\n"
+                    "[2] Mount Dandenong | New measurement: 625 meters. (2020)\n"
+                    "Output:\n"
+                    "1. Mount Dandenong height: 625 meters\n"
+                    "2. Mount Dandenong height: 633 meters"
+                ),
+                "dependencies": [2, 4],
+                "frozen": False,
+            },
+            # Step 6: Final answer
+            {
+                "number": 6,
+                "title": "Final answer",
+                "step_type": "llm",
+                "aim": "Produce answer with maximum token overlap using evidence.",
+                "stage_action": (
+                    "Extract answer as minimal exact phrase from highest-ranked evidence. NEVER paraphrase. "
+                    "For yes/no: single word. Output ONLY: Answer: <answer>"
+                ),
+                "reasoning_questions": "Which evidence tokens directly form the answer? What phrase maximizes token overlap with expected answer?",
+                "example_reasoning": (
+                    "Example 1:\n"
+                    "Question: Are America's Civil War and The Watchtower both magazines?\n"
+                    "Evidence: America's Civil War is a history magazine. The Watchtower is a religious magazine.\n"
+                    "Answer: yes\n\n"
+                    "Example 2:\n"
+                    "Question: What number Mughal emperor built the Kashmiri Gate?\n"
+                    "Evidence: Shah Jahan was the fifth Mughal emperor.\n"
+                    "Answer: fifth\n\n"
+                    "Example 3:\n"
+                    "Question: What is the height of Mount Dandenong?\n"
+                    "Evidence: 1. Mount Dandenong height: 633 meters\n"
+                    "Answer: 633 meters\n\n"
+                    "Example 4 (minimal phrase):\n"
+                    "Question: What type of government position does Bourke's parrot and Richard Bourke have in common?\n"
+                    "Evidence: 1. Richard Bourke position: Governor of New South Wales\n"
+                    "Answer: Governor"
+                ),
+                "dependencies": [2, 5],
+                "frozen": False,
+            },
+        ],
+    }
+```
+
+## Program Metrics
+
+- fitness : 0.682 (Token-level F1 score on multi-hop questions (SQuAD-style). Higher is better. Drives MAP-Elites selection.; ↑ better)
+- avg_extraction_failures : 0.000 (Average fraction of samples where answer extraction failed; ↓ better)
+- is_valid : 1 (Whether the program is valid (1 valid, 0 invalid); ↑ better)
+
+---
+
+## Program Insights
+
+- **[evidence_integration]**[harmful]**[high]**: Step 5 ignores Step 2 attributes, using only Step 4 passages for factual statements. Evidence: Step 5 stage_action says 'verbatim text from passages' (Step 4 output) and example doesn't process Step 2 attributes. This causes missing known facts, lowering F1. Mutation: Modify Step 5 to convert Step 2 attributes into factual statements and merge with Step 4 passages.
+- **[answer_extraction]**[harmful]**[high]**: Step 6 truncates answers (e.g., 'Governor' vs 'Governor of New South Wales') due to 'minimal exact phrase' instruction. Evidence: Step 6 example 4 outputs 'Governor' for evidence containing 'Governor of New South Wales', reducing token overlap. Mutation: Change to 'full exact phrase' and update examples to show complete answers.
+- **[query_generation]**[harmful]**[medium]**: Step 3 generates verbose queries (e.g., 'Paper Clips Seal Island release year comparison') including non-essential words like 'comparison'. Evidence: Step 3 example 1 query is longer than needed, hurting BM25 precision. Mutation: Tighten examples to show concise noun phrases (e.g., 'Paper Clips Seal Island release year').
+- **[adaptive_ranking]**[rigid]**[medium]**: Step 5 uses fixed weights (3,2,1) for ranking, which may not align with question relevance. Evidence: Rigid weights ignore query-specific importance; e.g., attribute proximity might be more critical for some questions. Mutation: Rank by question keyword overlap in addition to existing criteria.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: 1e43de3a → 76574579
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.709 | 0.682 | -0.027 | -3.9% | worsened ★ |
+| avg_extraction_failures | ↓ better | 0.000 | 0.000 | +0.000 | — | improved |
+| is_valid | ↑ better | 1 | 1 | +0 | +0.0% | no change |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -108,7 +118,7 @@) + (@@ -117,8 +127,8 @@) + (@@ -126,8 +136,8 @@) Required verbatim evidence statements, forcing inclusion of non-essential tokens (e.g., 'high' in '633 meters high'); step 6 propagated extra tokens, reducing token-F1 by 0.027.
+  - **[refinement]**: (@@ -22,9 +22,10 @@) + (@@ -32,23 +33,24 @@) Forced entity disambiguation without ambiguity detection; caused incorrect entity selection when context was insufficient (e.g., Washington state vs D.C.), propagating errors to retrieval.
+  - **[refinement]**: (@@ -63,28 +65,36 @@) Over-minimization of queries to avoid verbosity, removing disambiguating context (e.g., 'apple common name' vs 'apple fruit common name'); reduced retrieval precision and answer F1.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 7 | **Total Programs**: 83
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 4 | 0.693 | 0.553 | 0.441 | 87.5% | 16 | 1.50 | 6 |
+| 5 | 0.701 | 0.590 | 0.417 | 62.5% | 24 | 0.50 | 4 |
+| 6 | 0.709 | 0.642 | 0.586 | 100.0% | 12 | 0.50 | 3 |
+| 7 ← | 0.715 | 0.679 | 0.639 | 100.0% | 6 | 0.00 | 0 |
+
+---
+
+## Failure Analysis (10 of 236 failure(s) randomly sampled)
+
+### Case 1
+**Question**: What was the series name of a reality show where Gemma Clare Collins took part for only three days?
+**Expected**: UK series 14
+**Predicted**: I'm a Celebrity...Get Me Out of Here!
+**Hop 1 retrieval** (1/2 gold): MISSING — "I'm a Celebrity...Get Me Out of Here! (UK series 14)"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Gemma Collins", "I'm a Celebrity...Get Me Out of Here! (UK series 14)"
+
+### Case 2
+**Question**:  A novel by who is about a time traveler who attempts to prevent the assassination of President John F. Kennedy that has a a fictional town reappeared as late as his  novel?
+**Expected**: Stephen King
+**Predicted**: Doctor Sleep
+**Hop 1 retrieval** (1/2 gold): MISSING — "Derry (Stephen King)"
+**Hop 2 retrieval** (0/2 gold): MISSING — "11/22/63", "Derry (Stephen King)"
+
+### Case 3
+**Question**: What was the 2010 census population of the county in which Dry Valley, Nevada is located?
+**Expected**: 5,345
+**Predicted**: No
+**Hop 1 retrieval** (1/2 gold): MISSING — "Lincoln County, Nevada"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Dry Valley, Nevada", "Lincoln County, Nevada"
+
+### Case 4
+**Question**: "Rumbly in My Tumbly" is a song from the 1966 musical film featurette "Winnie the Pooh and the Honey Tree", is also incorporated into the 1977 musical film, "The Many Adventures of Winnie the Pooh" which is an amalgamation of the first three featurettes, of which fictional anthropomorphic teddy bear, created by English author A. A. Milne?
+**Expected**: Winnie-the-Pooh
+**Predicted**: Yes
+**Hop 1 retrieval** (1/2 gold): MISSING — "Winnie-the-Pooh"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Winnie-the-Pooh"
+
+### Case 5
+**Question**: Julien Duvivier and Andrew Adamson, have which occupation in common?
+**Expected**: film director
+**Predicted**: filmmaker
+**Hop 1 retrieval** (1/2 gold): MISSING — "Andrew Adamson"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Julien Duvivier"
+
+### Case 6
+**Question**: Shottenstein Store Corp's primary holders are Jerome Shottenstein, and what other entrepreneur that was born in 1954?
+**Expected**: Jay Schottenstein
+**Predicted**: Jeff Greene
+**Hop 1 retrieval** (1/2 gold): MISSING — "Jay Schottenstein"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Jay Schottenstein", "Schottenstein Stores"
+
+### Case 7
+**Question**: David Snoke co-published a paper in 2004 with what Lehigh University professor?
+**Expected**: Michael J. Behe
+**Predicted**: missing
+**Hop 1 retrieval** (1/2 gold): MISSING — "Michael Behe"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Michael Behe"
+
+### Case 8
+**Question**: What is the birthdate of this American actor, film director, producer, screenwriter, and singer, who starred in Nine Lives?
+**Expected**: July 26, 1959
+**Predicted**: July 29, 1973
+**Hop 1 retrieval** (0/2 gold): MISSING — "Kevin Spacey", "Nine Lives (2016 film)"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Kevin Spacey", "Nine Lives (2016 film)"
+
+### Case 9
+**Question**: PostNL is a mail, parcel and e-commerce corporation listed at a stock exchange formerly known as what?
+**Expected**: Amsterdam Stock Exchange
+**Predicted**: TNT N.V.
+**Hop 1 retrieval** (1/2 gold): MISSING — "Euronext Amsterdam"
+**Hop 2 retrieval** (1/2 gold): MISSING — "Euronext Amsterdam"
+
+### Case 10
+**Question**: What was the debut album of the founder of Reprise Records?
+**Expected**: "The Voice of Frank Sinatra"
+**Predicted**: No
+**Hop 1 retrieval** (0/2 gold): MISSING — "Frank Sinatra", "Reprise Records"
+**Hop 2 retrieval** (0/2 gold): MISSING — "Frank Sinatra", "Reprise Records"
+
+_Use these failure cases to identify systematic weaknesses. MISSING retrieval entries indicate the BM25 query at that hop failed to surface key supporting documents — consider improving the query generation prompt for that step. Cases where retrieval succeeded but prediction was still wrong suggest reasoning or answer extraction issues._
+

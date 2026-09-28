@@ -1,0 +1,812 @@
+"""Tests for gigaevo.evolution.scheduling module."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+
+import pytest
+
+from gigaevo.evolution.scheduling.feature_extractor import (
+    ChainFeatureExtractor,
+    CodeFeatureExtractor,
+    CompositeFeatureExtractor,
+)
+from gigaevo.evolution.scheduling.predictor import (
+    ConstantPredictor,
+    EvalTimePredictor,
+    RidgePredictor,
+    SimpleHeuristicPredictor,
+)
+from gigaevo.evolution.scheduling.prioritizer import (
+    CachedFirstPrioritizer,
+    FIFOPrioritizer,
+    LPTPrioritizer,
+    SJFPrioritizer,
+)
+from gigaevo.programs.core_types import ProgramStageResult, StageState
+from gigaevo.programs.program import Program
+from gigaevo.programs.program_state import ProgramState
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _prog(code: str = "def solve(): return 42") -> Program:
+    return Program(code=code, state=ProgramState.QUEUED)
+
+
+def _short_prog() -> Program:
+    return _prog("def f(): pass")
+
+
+def _long_prog() -> Program:
+    return _prog("def f():\n" + "    x = 1\n" * 200)
+
+
+# ---------------------------------------------------------------------------
+# FeatureExtractor tests
+# ---------------------------------------------------------------------------
+
+
+class TestCodeFeatureExtractor:
+    def test_returns_dict(self) -> None:
+        ext = CodeFeatureExtractor()
+        features = ext.extract(_prog())
+        assert isinstance(features, dict)
+        assert "code_length" in features
+        assert "num_lines" in features
+        assert "num_function_defs" in features
+        assert "num_loop_constructs" in features
+
+    def test_code_length_proportional(self) -> None:
+        ext = CodeFeatureExtractor()
+        short = ext.extract(_short_prog())
+        long = ext.extract(_long_prog())
+        assert long["code_length"] > short["code_length"]
+        assert long["num_lines"] > short["num_lines"]
+
+    def test_counts_loops(self) -> None:
+        ext = CodeFeatureExtractor()
+        code = "for i in range(10):\n    while True:\n        break"
+        features = ext.extract(_prog(code))
+        assert features["num_loop_constructs"] == 2.0
+
+    def test_counts_function_defs(self) -> None:
+        ext = CodeFeatureExtractor()
+        code = "def a(): pass\ndef b(): pass\ndef c(): pass"
+        features = ext.extract(_prog(code))
+        assert features["num_function_defs"] == 3.0
+
+
+class TestCompositeFeatureExtractor:
+    def test_merges_features(self) -> None:
+        class CustomExt:
+            def extract(self, program: Program) -> dict[str, float]:
+                return {"custom_feature": 42.0}
+
+        comp = CompositeFeatureExtractor([CodeFeatureExtractor(), CustomExt()])
+        features = comp.extract(_prog())
+        assert "code_length" in features
+        assert "custom_feature" in features
+        assert features["custom_feature"] == 42.0
+
+    def test_empty_raises(self) -> None:
+        with pytest.raises(ValueError, match="At least one"):
+            CompositeFeatureExtractor([])
+
+    def test_last_writer_wins(self) -> None:
+        class Ext1:
+            def extract(self, program: Program) -> dict[str, float]:
+                return {"shared": 1.0}
+
+        class Ext2:
+            def extract(self, program: Program) -> dict[str, float]:
+                return {"shared": 2.0}
+
+        comp = CompositeFeatureExtractor([Ext1(), Ext2()])
+        assert comp.extract(_prog())["shared"] == 2.0
+
+
+# ---------------------------------------------------------------------------
+# ChainFeatureExtractor tests (synthetic chain programs)
+# ---------------------------------------------------------------------------
+#
+# Hand-written synthetic chain programs that exercise every field the
+# extractor parses (step_type, tool_name, dependencies, system_prompt,
+# example_reasoning, stage_action string content).  Kept here verbatim
+# so the test does not depend on any file under `problems/` — and so a
+# future rename of a problem dir does not silently break this suite.
+
+_COMPLEX_CHAIN = """def entrypoint():
+    return {
+        "system_prompt": "",
+        "steps": [
+            {
+                "number": 1,
+                "step_type": "tool",
+                "step_config": {"tool_name": "retrieve"},
+                "dependencies": [],
+            },
+            {
+                "number": 2,
+                "step_type": "llm",
+                "stage_action": "REPLACE_ME_BASELINE_ACTION",
+                "example_reasoning": "<none>",
+                "dependencies": [1],
+            },
+            {
+                "number": 3,
+                "step_type": "llm",
+                "stage_action": "Generate a follow-up search query.",
+                "example_reasoning": "<none>",
+                "dependencies": [2],
+            },
+            {
+                "number": 4,
+                "step_type": "tool",
+                "step_config": {"tool_name": "retrieve"},
+                "dependencies": [3],
+            },
+            {
+                "number": 5,
+                "step_type": "llm",
+                "stage_action": "Combine prior summaries with new evidence.",
+                "example_reasoning": "<none>",
+                "dependencies": [2, 4],
+            },
+            {
+                "number": 6,
+                "step_type": "llm",
+                "stage_action": "Generate the final verification query.",
+                "example_reasoning": "<none>",
+                "dependencies": [5],
+            },
+            {
+                "number": 7,
+                "step_type": "tool",
+                "step_config": {"tool_name": "retrieve_deep"},
+                "dependencies": [6],
+            },
+        ],
+    }
+"""
+
+_SIMPLE_CHAIN = """def entrypoint():
+    return {
+        "system_prompt": "",
+        "steps": [
+            {
+                "number": 1,
+                "step_type": "tool",
+                "step_config": {"tool_name": "retrieve"},
+                "dependencies": [],
+            },
+            {
+                "number": 2,
+                "step_type": "llm",
+                "stage_action": "Summarize retrieved passages.",
+                "example_reasoning": "<none>",
+                "dependencies": [1],
+            },
+            {
+                "number": 3,
+                "step_type": "llm",
+                "stage_action": "Decide whether another hop is needed.",
+                "example_reasoning": "<none>",
+                "dependencies": [2],
+            },
+            {
+                "number": 4,
+                "step_type": "tool",
+                "step_config": {"tool_name": "retrieve"},
+                "dependencies": [3],
+            },
+            {
+                "number": 5,
+                "step_type": "llm",
+                "stage_action": "Integrate the second hop with prior evidence.",
+                "example_reasoning": "<none>",
+                "dependencies": [4],
+            },
+            {
+                "number": 6,
+                "step_type": "llm",
+                "stage_action": "Produce the final answer.",
+                "example_reasoning": "<none>",
+                "dependencies": [5],
+            },
+        ],
+    }
+"""
+
+
+class TestChainFeatureExtractor:
+    def test_complex_chain_step_counts(self) -> None:
+        """Complex chain: 3 tool + 4 LLM steps."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_COMPLEX_CHAIN))
+        assert features["n_tool_steps"] == 3.0
+        assert features["n_llm_steps"] == 4.0
+        assert features["n_total_steps"] == 7.0
+
+    def test_simple_chain_step_counts(self) -> None:
+        """Simple chain: 2 tool + 4 LLM steps."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_SIMPLE_CHAIN))
+        assert features["n_tool_steps"] == 2.0
+        assert features["n_llm_steps"] == 4.0
+        assert features["n_total_steps"] == 6.0
+
+    def test_empty_system_prompt_detected(self) -> None:
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_COMPLEX_CHAIN))
+        assert features["has_system_prompt"] == 0.0
+
+    def test_deep_retrieval_counted(self) -> None:
+        """Complex chain has one retrieve_deep step."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_COMPLEX_CHAIN))
+        assert features["n_deep_retrieval"] == 1.0
+
+    def test_simple_chain_no_deep_retrieval(self) -> None:
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_SIMPLE_CHAIN))
+        assert features["n_deep_retrieval"] == 0.0
+
+    def test_no_examples_when_placeholder(self) -> None:
+        """`<none>` example_reasoning yields zero examples."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_COMPLEX_CHAIN))
+        assert features["n_examples"] == 0.0
+
+    def test_evolved_program_has_more_string_content(self) -> None:
+        """Replacing a short stage_action with a longer one bumps total_string_content."""
+        ext = ChainFeatureExtractor()
+        baseline_feat = ext.extract(_prog(_COMPLEX_CHAIN))
+
+        evolved = _COMPLEX_CHAIN.replace(
+            '"REPLACE_ME_BASELINE_ACTION"',
+            (
+                '"Read every retrieved passage carefully. Extract entities, '
+                "dates, numerical values, and key relationships. Cross-reference "
+                "facts across passages, identify contradictions, format as "
+                "structured bullet points with passage citations, and omit any "
+                'background not directly relevant to the claim."'
+            ),
+        )
+        evolved_feat = ext.extract(_prog(evolved))
+
+        assert (
+            evolved_feat["total_string_content"] > baseline_feat["total_string_content"]
+        )
+
+    def test_evolved_with_system_prompt(self) -> None:
+        """Replacing the empty system_prompt with content flips has_system_prompt."""
+        ext = ChainFeatureExtractor()
+        evolved = _COMPLEX_CHAIN.replace(
+            '"system_prompt": ""',
+            '"system_prompt": "You are an evidence retrieval assistant."',
+        )
+        features = ext.extract(_prog(evolved))
+        assert features["has_system_prompt"] == 1.0
+
+    def test_evolved_with_examples(self) -> None:
+        """Adding `Example 1:` / `Example 2:` markers bumps n_examples."""
+        ext = ChainFeatureExtractor()
+        evolved = _COMPLEX_CHAIN.replace(
+            '"example_reasoning": "<none>"',
+            '"example_reasoning": "Example 1:\\nClaim: ...\\nExample 2:\\nClaim: ..."',
+            1,  # replace only first occurrence
+        )
+        features = ext.extract(_prog(evolved))
+        assert features["n_examples"] == 2.0
+
+    def test_dependency_fan_in(self) -> None:
+        """Step 5 of the complex chain has dependencies=[2, 4] — fan-in of 2."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog(_COMPLEX_CHAIN))
+        assert features["max_dependency_fan_in"] == 2.0
+
+    def test_complex_chain_dominates_simple_chain(self) -> None:
+        """More steps + deep retrieval -> higher predicted complexity."""
+        ext = ChainFeatureExtractor()
+        complex_feat = ext.extract(_prog(_COMPLEX_CHAIN))
+        simple_feat = ext.extract(_prog(_SIMPLE_CHAIN))
+
+        assert complex_feat["n_total_steps"] > simple_feat["n_total_steps"]
+        assert complex_feat["n_deep_retrieval"] > simple_feat["n_deep_retrieval"]
+        assert complex_feat["code_length"] > simple_feat["code_length"]
+
+    def test_non_chain_code_graceful(self) -> None:
+        """ChainFeatureExtractor handles non-chain code without crashing."""
+        ext = ChainFeatureExtractor()
+        features = ext.extract(_prog("def solve(): return 42"))
+        assert features["n_total_steps"] == 0.0
+        assert features["n_examples"] == 0.0
+        assert features["has_system_prompt"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Semantic chain features (json_document specs): hop_depth, passages_fetched,
+# instr_chars — the chains_bd3d behavior axes. Specs are parsed with the CARL
+# parse-layer models (problems.chains.types.RawChainSpec), so fixtures must be
+# schema-valid; semantics match the axis-mining study over the six finished
+# hover full7 runs (plans/2026-07-11-chain-bd3d-proposal.md). Non-JSON or
+# schema-invalid code falls back to zeros.
+# ---------------------------------------------------------------------------
+
+
+def _json_chain(steps: list[dict], system_prompt: str = "") -> str:
+    return json.dumps({"system_prompt": system_prompt, "steps": steps})
+
+
+def _tool(number: int, deps: list[int], tool_name: str = "retrieve") -> dict:
+    return {
+        "number": number,
+        "title": f"tool {number}",
+        "step_type": "tool",
+        "step_config": {"tool_name": tool_name, "input_mapping": {}},
+        "dependencies": deps,
+    }
+
+
+def _llm(
+    number: int,
+    deps: list[int],
+    aim: str = "A",
+    stage_action: str = "B",
+    **fields: str,
+) -> dict:
+    return {
+        "number": number,
+        "title": f"llm {number}",
+        "step_type": "llm",
+        "dependencies": deps,
+        "aim": aim,
+        "stage_action": stage_action,
+        **fields,
+    }
+
+
+_SEMANTIC_CHAIN = _json_chain(
+    [
+        _tool(1, []),
+        _llm(
+            2,
+            [1],
+            aim="AAAA",
+            stage_action="BBBBBB",
+            reasoning_questions="<none>",
+            example_reasoning="<none>",
+        ),
+        _tool(3, [2]),
+        _llm(4, [2, 3], stage_action="CCC"),
+        _tool(5, [4], tool_name="retrieve_deep"),
+        _llm(6, [5], example_reasoning="Example 1: X"),
+    ],
+    system_prompt="SYS",
+)
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("mmar_carl") is None,
+    reason="chains extra (mmar_carl) not installed",
+)
+class TestChainSemanticFeatures:
+    def _extract(self, code: str) -> dict[str, float]:
+        return ChainFeatureExtractor().extract(_prog(code))
+
+    def test_hop_depth_counts_tool_steps_in_upstream_closure(self) -> None:
+        """retrieve → llm → retrieve → llm → retrieve_deep = 3 hops."""
+        assert self._extract(_SEMANTIC_CHAIN)["hop_depth"] == 3.0
+
+    def test_hop_depth_parallel_retrievals_are_one_hop(self) -> None:
+        code = _json_chain([_tool(1, []), _tool(2, []), _llm(3, [1, 2])])
+        assert self._extract(code)["hop_depth"] == 1.0
+
+    def test_hop_depth_zero_without_tool_steps(self) -> None:
+        code = _json_chain([_llm(1, []), _llm(2, [1])])
+        assert self._extract(code)["hop_depth"] == 0.0
+
+    def test_hop_depth_terminates_on_dependency_cycle(self) -> None:
+        """Cyclic deps (invalid chain, but must not hang): each tool sees both
+        cycle members upstream, so hop = 1 + 2."""
+        code = _json_chain([_tool(1, [2]), _tool(2, [1])])
+        assert self._extract(code)["hop_depth"] == 3.0
+
+    def test_passages_fetched_weights_shallow_vs_deep(self) -> None:
+        """2 × retrieve (k=7) + 1 × retrieve_deep (k=10) = 24 passages."""
+        assert self._extract(_SEMANTIC_CHAIN)["passages_fetched"] == 24.0
+
+    def test_passages_fetched_ignores_non_retrieval_tools(self) -> None:
+        code = _json_chain([_tool(1, [], tool_name="calculator"), _tool(2, [1])])
+        assert self._extract(code)["passages_fetched"] == 7.0
+
+    def test_instr_chars_sums_guidance_fields_and_system_prompt(self) -> None:
+        """STRUCTURED_FIELDS chars: step2 aim(4)+stage_action(6), step4 1+3,
+        step6 1+1+example_reasoning(12), + system_prompt(3) = 31; '<none>'
+        placeholders excluded, titles (metadata) not counted."""
+        assert self._extract(_SEMANTIC_CHAIN)["instr_chars"] == 31.0
+
+    def test_semantic_features_zero_on_python_source(self) -> None:
+        features = self._extract(_COMPLEX_CHAIN)
+        assert features["hop_depth"] == 0.0
+        assert features["passages_fetched"] == 0.0
+        assert features["instr_chars"] == 0.0
+
+    def test_semantic_features_zero_on_non_dict_json(self) -> None:
+        features = self._extract(json.dumps([1, 2, 3]))
+        assert features["hop_depth"] == 0.0
+        assert features["passages_fetched"] == 0.0
+        assert features["instr_chars"] == 0.0
+
+    def test_semantic_features_zero_on_schema_invalid_spec(self) -> None:
+        """A step violating the parse-layer schema (LLM step without required
+        aim) zeroes the semantics — same gate as validate_chain_spec."""
+        step = _llm(1, [])
+        del step["aim"]
+        features = self._extract(_json_chain([step]))
+        assert features["hop_depth"] == 0.0
+        assert features["passages_fetched"] == 0.0
+        assert features["instr_chars"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Predictor tests
+# ---------------------------------------------------------------------------
+
+
+class TestConstantPredictor:
+    def test_returns_constant(self) -> None:
+        p = ConstantPredictor(42.0)
+        assert p.predict(_prog()) == 42.0
+        assert p.predict(_long_prog()) == 42.0
+
+    def test_always_warm(self) -> None:
+        assert ConstantPredictor().is_warm()
+
+    def test_update_is_noop(self) -> None:
+        p = ConstantPredictor()
+        p.update(_prog(), 100.0)
+        assert p.predict(_prog()) == 1.0  # unchanged
+
+
+class TestSimpleHeuristicPredictor:
+    def test_cold_start_uses_default_rate(self) -> None:
+        p = SimpleHeuristicPredictor(default_rate=0.5)
+        prog = _prog("x" * 200)
+        pred = p.predict(prog)
+        assert pred == pytest.approx(200 * 0.5)
+
+    def test_cold_start_code_length_floor(self) -> None:
+        p = SimpleHeuristicPredictor(default_rate=1.0)
+        prog = _prog("x")  # 1 char, below floor of 100
+        pred = p.predict(prog)
+        assert pred == pytest.approx(100 * 1.0)
+
+    def test_is_warm_after_enough_updates(self) -> None:
+        p = SimpleHeuristicPredictor()
+        assert not p.is_warm()
+        for i in range(5):
+            p.update(_prog("x" * 200), 100.0)
+        assert p.is_warm()
+
+    def test_learns_from_updates(self) -> None:
+        p = SimpleHeuristicPredictor(default_rate=0.1, window_size=5)
+        prog = _prog("x" * 200)
+
+        pred_before = p.predict(prog)  # 200 * 0.1 = 20
+
+        # Train with rate = 1.0 (200 chars, 200s eval)
+        for _ in range(5):
+            p.update(prog, 200.0)
+
+        pred_after = p.predict(prog)
+        assert pred_after > pred_before  # learned higher rate
+
+    def test_longer_code_predicts_longer(self) -> None:
+        p = SimpleHeuristicPredictor()
+        short = _short_prog()
+        long = _long_prog()
+        assert p.predict(long) > p.predict(short)
+
+    def test_ignores_non_positive_duration(self) -> None:
+        p = SimpleHeuristicPredictor()
+        p.update(_prog(), 0.0)
+        p.update(_prog(), -5.0)
+        assert not p.is_warm()  # no valid updates
+
+
+class TestRidgePredictor:
+    def test_cold_start_returns_default(self) -> None:
+        p = RidgePredictor(default_prediction=500.0)
+        pred = p.predict(_prog())
+        assert pred >= 500.0
+        assert not p.is_warm()
+
+    def test_warm_after_training(self) -> None:
+        p = RidgePredictor(min_samples=3)
+        for i in range(3):
+            code = "x" * (100 + i * 100)
+            p.update(_prog(code), 100.0 + i * 50)
+        assert p.is_warm()
+
+    def test_predictions_vary_with_features(self) -> None:
+        p = RidgePredictor(min_samples=5)
+        # Train: longer code => longer eval
+        for length in [200, 400, 600, 800, 1000]:
+            code = "x" * length
+            p.update(_prog(code), float(length))
+
+        short_pred = p.predict(_prog("x" * 200))
+        long_pred = p.predict(_prog("x" * 1000))
+        assert long_pred > short_pred
+
+    def test_custom_feature_extractor(self) -> None:
+        class CustomExt:
+            def extract(self, program: Program) -> dict[str, float]:
+                return {"magic": float(len(program.code))}
+
+        p = RidgePredictor(feature_extractor=CustomExt(), min_samples=3)
+        for i in range(3):
+            p.update(_prog("x" * (100 + i * 100)), 100.0 + i * 50)
+        assert p.is_warm()
+        pred = p.predict(_prog("x" * 500))
+        assert pred > 0
+
+    def test_prediction_floor_at_one(self) -> None:
+        p = RidgePredictor(min_samples=3)
+        # Train with tiny durations
+        for _ in range(3):
+            p.update(_prog("x" * 100), 0.01)
+        pred = p.predict(_prog("x" * 100))
+        assert pred >= 1.0
+
+    def test_ignores_non_positive_duration(self) -> None:
+        p = RidgePredictor(min_samples=3)
+        p.update(_prog(), 0.0)
+        p.update(_prog(), -10.0)
+        assert not p.is_warm()
+
+
+# ---------------------------------------------------------------------------
+# Prioritizer tests
+# ---------------------------------------------------------------------------
+
+
+class TestFIFOPrioritizer:
+    def test_preserves_order(self) -> None:
+        progs = [_prog(f"code_{i}") for i in range(5)]
+        result = FIFOPrioritizer().prioritize(progs)
+        assert [p.id for p in result] == [p.id for p in progs]
+
+    def test_empty_list(self) -> None:
+        assert FIFOPrioritizer().prioritize([]) == []
+
+    def test_does_not_modify_input(self) -> None:
+        progs = [_prog("a"), _prog("b")]
+        original_ids = [p.id for p in progs]
+        FIFOPrioritizer().prioritize(progs)
+        assert [p.id for p in progs] == original_ids
+
+    def test_no_predictor(self) -> None:
+        assert FIFOPrioritizer().predictor is None
+
+
+class TestLPTPrioritizer:
+    def test_longest_first(self) -> None:
+        pred = SimpleHeuristicPredictor(default_rate=1.0)
+        # Warm up predictor
+        for _ in range(5):
+            pred.update(_prog("x" * 200), 200.0)
+
+        short = _prog("x" * 100)
+        medium = _prog("x" * 500)
+        long = _prog("x" * 1000)
+
+        prioritizer = LPTPrioritizer(pred)
+        result = prioritizer.prioritize([short, medium, long])
+
+        # Longest should be first
+        assert result[0].id == long.id
+        assert result[-1].id == short.id
+
+    def test_falls_back_to_fifo_when_cold(self) -> None:
+        pred = SimpleHeuristicPredictor()
+        assert not pred.is_warm()
+
+        progs = [_prog(f"code_{i}") for i in range(3)]
+        prioritizer = LPTPrioritizer(pred)
+        result = prioritizer.prioritize(progs)
+        assert [p.id for p in result] == [p.id for p in progs]
+
+    def test_empty_list(self) -> None:
+        prioritizer = LPTPrioritizer(ConstantPredictor())
+        assert prioritizer.prioritize([]) == []
+
+    def test_has_predictor(self) -> None:
+        pred = ConstantPredictor()
+        prioritizer = LPTPrioritizer(pred)
+        assert prioritizer.predictor is pred
+
+    def test_does_not_modify_input(self) -> None:
+        pred = ConstantPredictor()
+        progs = [_prog("x" * 500), _prog("x" * 100)]
+        original_ids = [p.id for p in progs]
+        LPTPrioritizer(pred).prioritize(progs)
+        assert [p.id for p in progs] == original_ids
+
+
+class TestSJFPrioritizer:
+    def test_shortest_first(self) -> None:
+        pred = SimpleHeuristicPredictor(default_rate=1.0)
+        for _ in range(5):
+            pred.update(_prog("x" * 200), 200.0)
+
+        short = _prog("x" * 100)
+        medium = _prog("x" * 500)
+        long = _prog("x" * 1000)
+
+        prioritizer = SJFPrioritizer(pred)
+        result = prioritizer.prioritize([long, medium, short])
+
+        assert result[0].id == short.id
+        assert result[-1].id == long.id
+
+    def test_falls_back_to_fifo_when_cold(self) -> None:
+        pred = SimpleHeuristicPredictor()
+        progs = [_prog(f"code_{i}") for i in range(3)]
+        result = SJFPrioritizer(pred).prioritize(progs)
+        assert [p.id for p in result] == [p.id for p in progs]
+
+
+# ---------------------------------------------------------------------------
+# Integration: predictor + prioritizer work together
+# ---------------------------------------------------------------------------
+
+
+class TestPredictorPrioritizerIntegration:
+    def test_lpt_with_trained_heuristic(self) -> None:
+        """After training, LPT correctly reorders by predicted eval time."""
+        pred = SimpleHeuristicPredictor(default_rate=0.1, window_size=10)
+
+        # Train: code_length strongly correlates with eval time
+        for length in [200, 400, 600, 800, 1000]:
+            code = "x" * length
+            pred.update(_prog(code), float(length) * 2)  # 2s per char
+
+        assert pred.is_warm()
+        prioritizer = LPTPrioritizer(pred)
+
+        # Create programs of varying lengths
+        short = _prog("x" * 150)
+        medium = _prog("x" * 500)
+        long = _prog("x" * 2000)
+
+        result = prioritizer.prioritize([medium, short, long])
+        # Long should be first, short last
+        assert result[0].id == long.id
+        assert result[-1].id == short.id
+
+    def test_online_learning_improves_ordering(self) -> None:
+        """Predictor learns and improves ordering over time."""
+        pred = SimpleHeuristicPredictor(default_rate=0.1, window_size=10)
+        prioritizer = LPTPrioritizer(pred)
+
+        # Cold: FIFO order
+        progs = [_prog("x" * 100), _prog("x" * 1000)]
+        cold_result = prioritizer.prioritize(progs)
+        assert [p.id for p in cold_result] == [p.id for p in progs]  # FIFO
+
+        # Train
+        for _ in range(5):
+            pred.update(_prog("x" * 500), 500.0)
+
+        # Warm: LPT order
+        warm_result = prioritizer.prioritize(progs)
+        assert warm_result[0].id == progs[1].id  # longer code first
+
+
+# ---------------------------------------------------------------------------
+# Protocol compliance
+# ---------------------------------------------------------------------------
+
+
+class TestProtocolCompliance:
+    def test_custom_extractor_works_without_inheritance(self) -> None:
+        """FeatureExtractor is a Protocol — structural subtyping suffices."""
+
+        class MyExtractor:
+            def extract(self, program: Program) -> dict[str, float]:
+                return {"custom": 99.0}
+
+        ext = MyExtractor()
+        # Should work with CompositeFeatureExtractor (accepts FeatureExtractor)
+        comp = CompositeFeatureExtractor([ext])
+        assert comp.extract(_prog())["custom"] == 99.0
+
+    def test_custom_predictor_with_lpt(self) -> None:
+        """Custom EvalTimePredictor subclass works with LPT."""
+
+        class AlwaysHighPredictor(EvalTimePredictor):
+            def predict(self, program: Program) -> float:
+                return float(len(program.code))
+
+            def update(self, program: Program, actual_duration: float) -> None:
+                pass
+
+            def is_warm(self) -> bool:
+                return True
+
+        pred = AlwaysHighPredictor()
+        prioritizer = LPTPrioritizer(pred)
+        short = _prog("x" * 100)
+        long = _prog("x" * 1000)
+        result = prioritizer.prioritize([short, long])
+        assert result[0].id == long.id
+
+
+# ---------------------------------------------------------------------------
+# CachedFirstPrioritizer
+# ---------------------------------------------------------------------------
+
+
+def _cached_prog() -> Program:
+    """Program that has been DAG-evaluated once (re-eval candidate)."""
+    p = _prog()
+    p.stage_results = {
+        "fake_stage": ProgramStageResult(status=StageState.COMPLETED),
+    }
+    return p
+
+
+def _fresh_prog() -> Program:
+    """Brand-new mutant — no cached stages yet."""
+    return _prog()
+
+
+class TestCachedFirstPrioritizer:
+    def test_empty_list_returns_empty(self) -> None:
+        assert CachedFirstPrioritizer().prioritize([]) == []
+
+    def test_all_fresh_preserves_order(self) -> None:
+        progs = [_fresh_prog(), _fresh_prog(), _fresh_prog()]
+        result = CachedFirstPrioritizer().prioritize(progs)
+        assert [p.id for p in result] == [p.id for p in progs]
+
+    def test_all_cached_preserves_order(self) -> None:
+        progs = [_cached_prog(), _cached_prog(), _cached_prog()]
+        result = CachedFirstPrioritizer().prioritize(progs)
+        assert [p.id for p in result] == [p.id for p in progs]
+
+    def test_cached_surface_to_front(self) -> None:
+        """Mixed input — all cached programs appear before any fresh ones."""
+        f1, f2 = _fresh_prog(), _fresh_prog()
+        c1, c2 = _cached_prog(), _cached_prog()
+        # Interleaved input order
+        result = CachedFirstPrioritizer().prioritize([f1, c1, f2, c2])
+        result_ids = [p.id for p in result]
+        # All cached come before any fresh
+        cached_positions = [result_ids.index(c.id) for c in (c1, c2)]
+        fresh_positions = [result_ids.index(f.id) for f in (f1, f2)]
+        assert max(cached_positions) < min(fresh_positions)
+
+    def test_relative_order_preserved_within_tiers(self) -> None:
+        """Within cached and fresh tiers, input order is preserved."""
+        f1, f2, f3 = _fresh_prog(), _fresh_prog(), _fresh_prog()
+        c1, c2 = _cached_prog(), _cached_prog()
+        result = CachedFirstPrioritizer().prioritize([f1, c1, f2, c2, f3])
+        assert [p.id for p in result] == [c1.id, c2.id, f1.id, f2.id, f3.id]
+
+    def test_input_list_not_mutated(self) -> None:
+        f, c = _fresh_prog(), _cached_prog()
+        original = [f, c]
+        snapshot = list(original)
+        CachedFirstPrioritizer().prioritize(original)
+        assert original == snapshot  # same objects, same order
+
+    def test_predictor_is_none(self) -> None:
+        """No predictor — no online learning needed (cache state is the signal)."""
+        assert CachedFirstPrioritizer().predictor is None

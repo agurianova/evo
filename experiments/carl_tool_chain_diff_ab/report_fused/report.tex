@@ -1,0 +1,990 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{mathpazo}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\emergencystretch=3em
+\graphicspath{{./}{../report_full250/}}
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{good}{HTML}{1A7F37}
+\definecolor{bad}{HTML}{B42318}
+\definecolor{qwen}{HTML}{1F4E79}
+\definecolor{gem}{HTML}{C9720B}
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{0.8em}{}
+\captionsetup{font=small,labelfont={bf,color=accent}}
+\newcommand{\armA}{\textcolor{bad}{arm A}}
+\newcommand{\armB}{\textcolor{accent}{arm B}}
+\newcommand{\partrule}[2]{%
+  \section*{#1}%
+  \noindent{\large\color{accent!70!black}#2}\par\bigskip}
+
+\lstdefinestyle{json}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!8},
+  frame=single, rulecolor=\color{gray!40}, framerule=0.4pt,
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, aboveskip=8pt, belowskip=8pt}
+\lstset{style=json}
+
+\newsavebox{\eliBox}
+\newenvironment{eli5}
+  {\par\medskip\noindent\begin{lrbox}{\eliBox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}\small}
+  {\end{minipage}\end{lrbox}\noindent\fcolorbox{accent!40}{accent!4}{\usebox{\eliBox}}\par\medskip}
+
+%% Held-out qwen test numbers — filled from test_metrics_qwen.json when the eval lands.
+\newcommand{\qTseedS}{0.767} % seed test soft
+\newcommand{\qTseedD}{48.3} % seed test discrete %
+\newcommand{\qTaS}{0.833}    % arm A winner test soft
+\newcommand{\qTaD}{59.0}    % arm A winner test discrete %
+\newcommand{\qTbS}{0.816}    % arm B winner test soft
+\newcommand{\qTbD}{56.7}    % arm B winner test discrete %
+\newcommand{\qTgS}{0.827}    % arm B gen2 test soft
+\newcommand{\qTgD}{61.0}    % arm B gen2 test discrete %
+
+\title{\color{accent}\bfseries Tool-Aware DAG-Diff Mutation for Retrieval Chains\\
+\large Two paired A/Bs on HoVer multi-hop retrieval: does the structured diff still\\
+earn its keep as the mutator scales from a mid-tier to a top-tier reasoning model?\\
+\large (single-parent; mutators \texttt{gemini-3.5-flash} and \texttt{Qwen3-235B-A22B-Thinking}; full 250-mutant runs)}
+\author{GigaEvo}
+\date{2026-07-05}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Two paired A/B runs on HoVer multi-hop retrieval compare \emph{free full-document rewriting}
+(\armA) against a \emph{schema-compiled, tool-aware slot diff} (\armB) as the mutation operator.
+The executor is held fixed; only the mutator scales: \texttt{gemini-3.5-flash} (Part~I) and
+\texttt{Qwen3-235B-A22B-Thinking} (Part~II). A first attempt produced a spectacular --- and
+spurious --- headline: ``38\% of a strong mutator's rewrites are malformed JSON.'' An audit traced
+almost all of it to a harness bug: the structured-output schema demanded Python while the prompt
+demanded JSON. We fixed the schema and re-ran both \armA{} runs, keeping the originals as a study
+in structured-output hygiene (\S\ref{sec:artifact}). The honest post-fix picture: free rewriting
+under a strong mutator is \emph{not} a validity disaster (96.7\% / 85.8\% valid), and peak fitness
+is statistically tied in both pairs --- the same seed re-scored four times spans 0.732--0.753, a
+noise band wider than either best-fitness gap. Three advantages survive at both mutator strengths.
+\textbf{Validity:} the diff persisted \emph{zero} malformed children in both of its runs; every
+residual free-rewrite child that persisted malformed is a \emph{truncated long emission}
+(tail-clipped on gemini, 3.3\%; head-clipped on the local Qwen serving stack, 13.8\%) --- a
+fragility of whole-document re-emission that the diff's short, slot-local payloads avoided on
+both stacks. \textbf{Search efficiency:} in these runs the diff's never-beaten winner appeared at
+31\% / 24\% of the budget versus 52\% / 94\%, so retrospective cost-to-winner falls \textbf{36\%}
+(Part~I) and \textbf{70\%} (Part~II) at parity cost per valid program --- point estimates from one
+replicate per arm. \textbf{Legibility:} both diff-arm winners sit on short, typed lineages whose
+edits --- including a final prompt-only, single-field mutation --- can be read verbatim; the
+rewrite arm has no operator-native diff to inspect. Verdict: default to the diff for wire-JSON
+genomes at every mutator strength tested; after harness hygiene its dividend is not ``strong
+models can't write JSON'' but \emph{earlier, cheaper, auditable winners with zero persisted
+malformed output}.
+\end{abstract}
+
+\section{Motivation}
+On the CARL chain tasks the evolved ``program'' is not Python but a wire-JSON document
+describing a DAG of retrieval and LLM steps (\texttt{ReasoningChain.to\_dict} plus platform
+extras). The stock mutation path (\texttt{mutation=llm\_rewrite}) asks the LLM to re-emit the
+\emph{whole} document as free text: every emission re-risks the entire syntax, and a malformed
+child is only discovered \emph{after} it has been persisted and (if the parse survives
+extraction) has consumed a full evaluation. Two prior A/Bs established the structured-diff
+alternative on the \emph{summarizer} task, whose chains are LLM-only. This report answers three
+questions those runs left open; the third is the reason for the second, cross-model run:
+\begin{itemize}
+  \item \textbf{Does the diff generalise to tool-bearing genomes?} HoVer chains interleave
+  \texttt{tool} steps (\texttt{retrieve}, \texttt{retrieve\_deep}) with LLM steps. The
+  original \texttt{ChainDagDiff} was LLM-step-only and hard-rejected tool steps; \armB{}
+  exercises a new vocabulary, \texttt{AllowedToolChainChanges}, that admits tool steps as
+  first-class slots.
+  \item \textbf{Does the guarantee still matter when the mutator is \emph{strong}?} The prior
+  run used a weak non-reasoning 8B model, where free-form JSON was expected to break. Part~I's
+  mutator is \texttt{gemini-3.5-flash} with \texttt{reasoning.effort:high} --- a capable model
+  that should rarely emit malformed JSON.
+  \item \textbf{Does the advantage \emph{survive} an even stronger mutator?} Part~II re-runs the
+  identical A/B with \texttt{Qwen3-235B-A22B-Thinking} --- a frontier-scale reasoning model. If
+  the diff's edge were merely ``the mutator is not good enough at JSON,'' a stronger mutator
+  should erase it. The cross-model comparison (\S\ref{sec:synthesis}) separates the advantages
+  that \emph{shrink} with mutator strength from the ones that \emph{hold}.
+\end{itemize}
+A fourth finding was unplanned. The first \armA{} runs under both mutators were invalidated by a
+schema/prompt contradiction in the mutation harness; \S\ref{sec:artifact} documents the bug, the
+decomposition of the spurious ``malformed'' children, and what the episode teaches about
+structured-output hygiene. All \armA{} numbers in Parts I--II come from the fixed re-runs.
+
+\section{Setup}
+\label{sec:setup}
+Two \emph{paired} A/Bs, each two arms run from scratch, arms identical except the mutation
+operator; the two pairs identical except the mutator model (\texttt{launch\_arm.sh},
+\texttt{launch\_arm\_qwen.sh}):
+\begin{itemize}
+  \item \textbf{Task:} \texttt{problems/chains/hover/full7}, \texttt{pipeline=program\_is\_json}.
+  Full-chain mode: no frozen steps, no topology matching; the child may freely change step
+  count/types/dependencies within \texttt{FULL\_CHAIN\_CONFIG} (\texttt{max\_steps}=7). Fitness
+  is soft retrieval coverage --- for each of 300 HoVer claims, the fraction of gold
+  supporting-fact article titles found across \emph{all} tool-step outputs (higher better).
+  \item \textbf{Mutators (the only cross-pair difference):}
+  \textbf{Part~I} --- \texttt{google/gemini-3.5-flash} via OpenRouter, with
+  \texttt{reasoning.effort:high} and \texttt{service\_tier:flex}.
+  \textbf{Part~II} --- \texttt{Qwen3-235B-A22B-Thinking-2507} served by the local LiteLLM
+  proxy. Within each pair the mutator config is \emph{identical} across arms.
+  \item \textbf{Executor:} \texttt{Qwen/Qwen3-8B} via the LiteLLM proxy, run step-batched over the
+  300-sample set --- \emph{the same executor in both pairs}. Holding it fixed removes the executor
+  as a designed source of variation; stochastic scoring noise and serving-stack state remain
+  (see the caveats).
+  \item \textbf{Config:} \texttt{memory=none}, \texttt{num\_parents=1},
+  \texttt{max\_mutants=250}, one 7-step retrieval seed, disk storage. \armA{} runs the stock
+  full wire-JSON rewrite
+  (\texttt{mutation=llm\_rewrite}). \armB{} runs the \texttt{StructuredDiffMutationOperator}
+  driving the \texttt{AllowedToolChainChanges} grammar
+  (\texttt{mutation=carl\_with\_retrieval\_tools}).
+\end{itemize}
+
+\noindent\textbf{Single parent.} With \texttt{num\_parents=1} the diff grammar collapses to its
+single-parent form (\texttt{base\_parent} is one letter; every \texttt{keep}-id enum ranges
+over one parent's steps). Crossover is unavailable this run --- a deliberate simplification,
+two-parent tool-crossover left as prior work.
+
+\medskip\noindent\textbf{Provenance and timing.} The \armA{} runs reported in Parts I--II are
+re-runs, launched after the harness fix of \S\ref{sec:artifact}; the \armB{} runs predate them by
+several days. Configs, seed, and executor are unchanged in between, but the arms of each pair did
+not run concurrently, so shared proxy and cluster load over those days are uncontrolled --- a
+caveat we accept and disclose rather than re-run \armB.
+
+\medskip\noindent\textbf{Fitness is a noisy draw.} The executor samples at temperature 0.6
+(top-p 0.95), so a program's fitness is stochastic. The same seed chain, re-scored once per run,
+came back 0.732 / 0.753 (Part~I A/B) and 0.734 / 0.743 (Part~II A/B) --- $0.741 \pm 0.010$
+across the four draws, a \textbf{0.021 spread with identical genomes}. Best-fitness gaps at or below that band
+(both pairs, as it turns out) should be read as ties. The band bounds noise on
+\emph{single-program} statistics --- a best child, a seed re-score; arm \emph{means} over
+$\sim$200+ children carry standard errors an order of magnitude smaller and are read against the
+per-arm spread instead (the mean~$\pm$~SD rows in the fitness tables). Best-of-$N$ selection bias matters too:
+an arm with more valid children takes more draws at the maximum. Part~I is nearly balanced
+(234 vs.\ 239 valid); in Part~II the \emph{rewrite} arm has fewer draws (211 vs.\ 245) yet still
+posts the higher best --- so draw-count bias does not explain its edge, though the noise band does.
+
+\section{The tool-aware diff language}
+\label{sec:language}
+The child chain is a shelf of numbered slots; the LLM fills them left-to-right. What is new
+here versus the summarizer diff is that a slot may hold a \texttt{tool} step, not only an LLM
+step: a kept tool step carries its tool name and arguments, and the grammar admits editing them.
+
+\begin{eli5}
+Picture the child chain as a row of numbered boxes. Into each box you put either a
+\emph{photocopy} of a step from the parent --- named by its label (\texttt{a1}, \texttt{a2},
+\dots), optionally with small corrections --- or a \emph{brand-new} step. Some parent steps are
+``go-look-it-up'' \emph{tool} steps (retrieve passages); those are photocopied and corrected the
+same way as thinking steps. Each box lists which \emph{earlier} boxes it reads from, and the
+form for box $k$ only has checkboxes for boxes $1..k{-}1$ --- so pointing forward or at yourself
+is not against the rules, there is simply nowhere on the form to write it. Leftover boxes stay
+empty (no gaps), and the last filled box produces the graded answer.
+\end{eli5}
+\noindent
+The form is a JSON schema compiled fresh per mutation from the actual parent and shipped to the
+provider as the \texttt{json\_schema} structured-output grammar, so a violating token can never
+be sampled. A pydantic model re-checks the payload as a backstop, and the applier round-trips
+the result through \texttt{ReasoningChain} as a final assertion. Everything an unconstrained rewriter
+routinely gets wrong --- self/forward dependencies, cycles, keeping a nonexistent step,
+over-long chains, invented fields, \emph{malformed JSON} --- is unrepresentable by construction.
+Only step-contiguity is left to a validator, with one disclosed subtlety: a payload whose filled
+slots are non-contiguous is not rejected but \emph{compacted} (filled slots slide left, order
+preserved). This silent-repair semantic went unlogged in the runs below; the current code emits
+a warning whenever it fires, so future runs can bound its frequency. A rejection costs one LLM
+call: nothing persisted, nothing evaluated.
+
+\partrule{Part I --- mid-tier mutator: \texttt{gemini-3.5-flash}}{full 250-mutant paired run, \texttt{reasoning.effort:high}}
+
+\section{Results (gemini mutator)}
+\label{sec:results}
+
+\subsection{Validity funnel --- a residual truncation tax, not a catastrophe}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+full 250-mutant run & \armA{} (rewrite) & \armB{} (tool diff) \\
+\midrule
+mutation LLM calls (incl.\ retries) & 276 & 259 \\
+pre-persist generation failures & 24 (no code extracted) & 4 (2 schema, 2 call) \\
+children persisted & 252 & 254 \\
+\quad still executing at stop (excluded) & 10 & 12 \\
+\midrule
+\textbf{completed evaluations} & \textbf{242} & \textbf{242} \\
+\quad valid & 234 & \textbf{239} \\
+\quad invalid & 8 & 3 \\
+\qquad of which malformed wire-JSON & \textcolor{bad}{8 (3.3\%)} & \textbf{\textcolor{good}{0}} \\
+\qquad other (non-genome) & 0 & 3$^\ast$ \\
+\textbf{valid yield among completed} & 96.7\% & \textbf{\textcolor{good}{98.8\%}} \\
+\bottomrule
+\end{tabular}
+\caption{With the harness fixed, the free-form path is no longer a validity disaster: 8 of 242
+completed children (3.3\%) are malformed wire-JSON, versus the pre-fix run's 38\%
+(\S\ref{sec:artifact}). All 8 are \emph{tail-truncated}: each document opens correctly and dies
+mid-object at its final character --- consistent with the emission being cut off (e.g.\ an output
+ceiling binding after a long reasoning phase), not with syntax confusion. \armB{} persisted zero
+malformed children; $^\ast$its 3 completed-invalids are evaluator-infrastructure crashes
+(\texttt{exit=1}) whose genomes parse fine, so \armB's genome-defect count is 0. \armA's 24
+pre-persist failures (8.7\% of calls) returned no extractable document at all --- a wasted call
+each, but nothing persisted or evaluated. (Funnel rows need not close exactly --- e.g.\
+$259-4=255$ calls vs 254 persisted in \armB{}: the odd residual call produced output that was
+never persisted and is unclassifiable from the logs.)}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_overview.png}
+\caption{Left: per-child soft-coverage fitness (dots) and best-so-far (line); invalid children
+are drawn as crosses on the floor line --- now sparse in \emph{both} arms. \armB's best-so-far
+reaches 0.858 vs \armA's 0.843. Right: the validity funnel over the full run --- both persist
+$\sim$250, \armA{} keeps 234 valid to \armB's 239.}
+\end{figure}
+
+\noindent\textbf{What still breaks, and why it matters.} The pre-fix story (``a strong model
+emits malformed JSON in 38\% of its whole-document rewrites'') is dead --- that was our harness
+(\S\ref{sec:artifact}). What survives is smaller but structural: a whole-document rewrite is a
+single $\sim$2--5k-token emission, and \emph{some} of those get truncated in flight. The diff
+never ships a payload that long --- kept slots are named, not re-serialised --- so a truncation
+of that depth has nothing to bite on; and were the outer response cut anyway, the
+grammar-checked parse fails \emph{pre-persist} rather than persisting a corrupt genome.
+Part~II tests whether this residue also appears on a different serving stack (it does,
+spectacularly, from the other end of the document).
+
+\subsection{Fitness --- \armB{} leads, inside the noise band}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+completed children & \armA{} (rewrite) & \armB{} (tool diff) \\
+\midrule
+best child & 0.843 & \textbf{\textcolor{good}{0.858}} \\
+child mean $\pm$ SD & $0.782 \pm 0.031$ & \textbf{\textcolor{good}{$0.800 \pm 0.045$}} \\
+child median & 0.789 & \textbf{\textcolor{good}{0.802}} \\
+seed (executor re-score) & 0.732 & 0.753 \\
+\bottomrule
+\end{tabular}
+\caption{\armB{} leads all central measures. The best-child margin (0.015) sits inside the 0.021
+seed re-score spread --- the same genome scored 0.732 in one run and 0.753 in the other --- and
+reads as a tie. The mean gap ($+0.018$; per-arm standard errors $\approx$0.002--0.003) is larger
+than per-evaluation sampling noise alone, but with one replicate per arm and non-concurrent
+execution we read it as a consistent \armB-ward lean, not an established win.}
+\end{table}
+
+\subsection{Held-out test coverage vs.\ the CARL feedback-condition baselines}
+\label{sec:benchcmp}
+The four inference-time feedback conditions (\emph{without-feedback}, \emph{self-reason},
+\emph{metric-aware}, \emph{data-aware}) are an \textbf{executor} axis, orthogonal to this
+report's \textbf{mutator} axis. Our runs hold the executor fixed at \texttt{feedback\_mode=none}
+(\emph{without-feedback}: single-pass, no retry) and vary only the mutation operator. To place
+our winners on the same HoVer test set, Table~\ref{tab:benchcmp} reproduces the feedback-condition
+sweep (mutator \texttt{Qwen3-235B-A22B-Thinking}) and adds \emph{both} mutator pairs' best
+programs. Metric is \textbf{discrete coverage} ($1$ iff every gold title
+retrieved), $n=300$ test claims, base $=$ seed chain $\to$ best $=$ evolved winner.
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lllcl}
+\toprule
+method & mutator & feedback & test disc.\ base$\to$best & source \\
+\midrule
+prompt & Qwen3-235B-Think & ---          & $43.3 \to 49.0$ & prior table$^\dagger$ \\
+GEPA   & Qwen3-235B-Think & ---          & $43.3 \to 46.0$ & prior table$^\dagger$ \\
+CARL   & Qwen3-235B-Think & none         & $48.7 \to 56.0$ & prior table$^\dagger$ \\
+CARL   & Qwen3-235B-Think & self-reason  & $46.3 \to 57.0$ & prior table$^\dagger$ \\
+CARL   & Qwen3-235B-Think & metric-aware & $46.3 \to 60.7$ & prior table$^\dagger$ \\
+CARL   & Qwen3-235B-Think & data-aware   & $68.3 \to 68.7$ & prior table$^\dagger$ \\
+\midrule
+\armA{} (free rewrite)   & gemini-3.5-flash & none & $44.0 \pm 2.9 \to \textbf{67.3} \pm 2.7$ & \textbf{Part I} \\
+\armB{} (CARL tool diff) & gemini-3.5-flash & none & $44.0 \pm 2.9 \to \textbf{\textcolor{good}{68.0}} \pm 2.7$ & \textbf{Part I} \\
+\addlinespace
+\armA{} (free rewrite)   & Qwen3-235B-Think & none & $\qTseedD \pm 2.9 \to \qTaD \pm 2.8$ & \textbf{Part II} \\
+\armB{} (CARL tool diff) & Qwen3-235B-Think & none & $\qTseedD \pm 2.9 \to \qTbD \pm 2.9$ & \textbf{Part II} \\
+\bottomrule
+\end{tabular}
+\caption{Held-out HoVer discrete coverage ($n=300$). Our rows carry the binomial
+claim-sampling $\pm$SE on each value, with executor re-draw noise on top; the prior-table rows
+are user-supplied point values with no dispersion available. \textbf{Top block:} the feedback-condition
+sweep under the \texttt{Qwen3-235B-Thinking} mutator (user-supplied; \emph{prompt} and
+\emph{GEPA} are the sweep's prompt-optimisation baselines). \textbf{Middle block:}
+Part~I's two winners under the \texttt{gemini-3.5-flash} mutator, both at \texttt{feedback=none}
+--- a near-tie (68.0 vs 67.3, within the $\sim$3.7-pt single-draw noise of
+Table~\ref{tab:lineagetest}); both sit $\sim$11 points above the prior sweep's without-feedback
+best (56.0), though that comparison crosses evaluations ($^\dagger$). \textbf{Bottom block:}
+Part~II's winners under the \emph{same} mutator as the prior sweep --- the closest available
+comparison, with modest margins (59.0 / 56.7 vs 56.0, inside the noise floor;
+\S\ref{sec:benchcmpq}). Our seed re-scores inside the prior table's base cluster
+($43.3$--$48.7$), consistent with --- though not proof of --- a shared metric and split.
+$^\dagger$Prior rows are user-supplied; their column semantics (Val vs Test) and the identity of
+their ``CARL'' operator are our best-judgment reading, so treat cross-block comparisons as
+contextual, not conclusive.}
+\label{tab:benchcmp}
+\end{table}
+
+\subsection{Token cost --- full reasoning split, near-parity totals}
+\label{sec:tokens}
+The pre-fix run could not compare reasoning tokens: \armA's emitter silently dropped the field
+\texttt{tokens\_reasoning}. That instrumentation bug is fixed, and the re-run gives the
+first complete cross-arm split under a reasoning mutator.
+\begin{table}[H]\centering\small
+\begin{tabular}{lccc}
+\toprule
+mutation side, full run (gemini) & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+tokens in & 1{,}821{,}207 & 1{,}934{,}479 & $+6.2\%$ \\
+tokens out (total) & 1{,}890{,}914 & 1{,}882{,}208 & $-0.5\%$ \\
+\quad of which reasoning & 1{,}502{,}356 (79\%) & 1{,}639{,}000 (87\%) & $+9.1\%$ \\
+\quad \textbf{content (out $-$ reasoning)} & \textbf{388{,}558} & \textbf{243{,}208} & \textbf{$-37\%$} \\
+LLM calls (incl.\ retries) & 276 & 259 & $-6\%$ \\
+\bottomrule
+\end{tabular}
+\caption{Total output is a wash: gemini reasons hard on both arms (79\% and 87\% of output), and
+\armB's heavier thinking almost exactly offsets its lighter payload. The \emph{content} row is
+the diff's designed economy finally measured cleanly: emitting slot deltas instead of the whole
+re-serialised chain costs \textbf{37\% fewer content tokens}. \armB{} pays $+6\%$ input for the
+schema-bearing prompt. Net: on a mid-tier reasoning mutator, the diff's token bill is the same
+--- its economy shows up in \emph{what} is generated, not how much.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_tokens.png}
+\caption{Left: mutation output tokens per call (dots) with a 10-call rolling mean --- the arms
+overlap; \armB's small content payload plus its larger reasoning channel matches \armA's
+content-heavy output. Right: cumulative tokens --- input and output curves track closely
+throughout; no separation like the non-reasoning summarizer run.}
+\end{figure}
+
+\subsection{Cost/quality frontier --- the dollar that matters is cost-to-winner}
+\label{sec:pareto}
+Converting tokens to dollars at the cheapest OpenRouter \texttt{gemini-3.5-flash} price
+(\$1.50/M in, \$9.00/M out, output inclusive of reasoning; the shared Qwen3-8B executor is
+excluded) reframes the comparison. Cost is attributed by \texttt{created\_at}: each child, in
+wall-clock creation order, consumes the next accepted mutation call, so ``cost to a program'' is
+the cumulative mutation spend up to and including its creation. (We deliberately do \emph{not}
+use the persisted \texttt{atomic\_counter} field --- it is non-monotone against creation time
+here; \texttt{created\_at} and the evolution-loop \texttt{iteration} clock agree to within a
+rank or two throughout.)
+
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+mutation-model \$ (OpenRouter cheapest) & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+total run spend & \$19.75 & \$19.84 & $+0.5\%$ \\
+\quad of which reasoning channel & \$13.52 (68\%) & \$14.75 (74\%) & --- \\
+\midrule
+\textbf{cost to the winning program} & \$10.17 & \textbf{\textcolor{good}{\$6.46}} & \textbf{$-36\%$} \\
+\quad winner reached at (chrono.\ rank) & 131/252 (52\%) & \textbf{\textcolor{good}{80/254 (31\%)}} & earlier \\
+\quad winner fitness (train soft) & 0.843 & 0.858 & tie (noise band) \\
+\midrule
+cost per \emph{valid} program & \$0.084 & \$0.083 & parity \\
+budget wasted on invalid children & \$0.65 (3.3\%) & \$0.25 (1.2\%) & --- \\
+\bottomrule
+\end{tabular}
+\caption{Post-fix, total spend and cost-per-valid-program are parity --- the pre-fix run's
+``38\% of \armA's budget wasted'' collapses to \$0.65 once the harness stops sabotaging the
+rewrites. What remains is \emph{timing}: \armB's never-beaten winner exists after 31\% of the
+run (\$6.46), \armA's only after 52\% (\$10.17) --- retrospectively $-36\%$ cost-to-winner.
+Banking that saving online would need a stopping rule; the peak itself is a statistical tie.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_pareto.png}
+\caption{\textbf{Left:} cost-to-winner vs.\ best train fitness --- each arm's best-so-far
+fitness as cumulative mutation dollars accrue. \armB{} sits up-and-to-the-left and owns the
+frontier. \textbf{Right:} cost-to-program vs.\ held-out test discrete coverage, every evaluated
+lineage program placed at its true cost-up-to-creation. \armB's connected climb reaches $68\%$
+coverage by \$6.46, with the decisive \texttt{gen1}$\to$\texttt{gen2} rewrite already at
+$64.3\%$ for a cumulative \textbf{\$0.69}; \armA's winner reaches $67.3\%$ at \$10.17. x-axis is
+mutation-model tokens only; executor excluded.}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_waste.png}
+\caption{\textbf{Left:} each arm's mutation budget split (by its valid/invalid child rate) into
+productive spend (green) and spend on invalid children (red) --- \$0.65 vs \$0.25, both small
+post-fix. \textbf{Right:} cost per valid program, \$0.084 vs \$0.083 --- parity. The waste
+asymmetry that dominated the pre-fix run now lives almost entirely in \emph{when} the winner
+arrives (previous figure), not in burned evaluations.}
+\end{figure}
+
+\subsection{Structural exploration --- both preserve topology, \armB{} tighter}
+\label{sec:struct}
+Both arms mostly preserve the seed's 7-step structure. \armA's valid children are
+$\{7\!:\!181,\ 6\!:\!32,\ 5\!:\!21\}$ (77\% at 7 steps); \armB's are
+$\{7\!:\!200,\ 6\!:\!20,\ 5\!:\!18,\ 3\!:\!1\}$ (84\% at 7 steps), with a single deliberate
+$7\!\to\!3$ prune. No wholesale chain-collapse on this task --- retrieval coverage rewards
+keeping tool steps, so even the free rewriter keeps them --- but the diff stays marginally
+closer to parent topology, consistent with edits that touch slots rather than re-imagine the
+chain. (The strong-mutator pair inverts this; see \S\ref{sec:structq}.)
+\begin{figure}[H]\centering
+\includegraphics[width=0.72\textwidth]{ab_nsteps.png}
+\caption{Chain-length distribution of valid children. Both arms concentrate at 7 steps; \armA{}
+spreads a little more toward 5--6, \armB{} stays tighter at 7 with one 3-step prune.}
+\end{figure}
+
+\section{The winning chains --- convergent architecture}
+\label{sec:chains}
+The two arms converge on essentially the same best retrieval architecture. Both winners abandon
+the seed's ``retrieve $\to$ summarise $\to$ query'' rhythm for a \textbf{deepen-and-accumulate}
+chain: four \texttt{retrieve\_deep} ($k{=}10$) tool steps alternating with three
+query-generation LLM steps, the summarise steps --- an information bottleneck that discarded raw
+passages before the next hop --- gone in both.
+
+\begin{table}[H]\centering\small
+\begin{tabular}{clll}
+\toprule
+step & type & \armA{} best (0.843) & \armB{} best (0.858) \\
+\midrule
+1 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$outer)} & \texttt{retrieve\_deep(\$outer)} \\
+2 & \textcolor{bad!70!black}{llm} & 2nd-hop query \hfill $[1]$ & 2nd-hop query \hfill $[1]$ \\
+3 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[2]$ & \texttt{retrieve\_deep(\$hist[1])} \hfill $[2]$ \\
+4 & \textcolor{bad!70!black}{llm} & 3rd-hop query \hfill $[1,3]$ & 3rd-hop query \hfill $[1,3]$ \\
+5 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[4]$ & \texttt{retrieve\_deep(\$hist[3])} \hfill $[4]$ \\
+6 & \textcolor{bad!70!black}{llm} & 4th-hop query \hfill $[1,5]$ & 4th-hop query \hfill $[1,3,5]$ \\
+7 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[6]$ & \texttt{retrieve\_deep(\$hist[5])} \hfill $[6]$ \\
+\bottomrule
+\end{tabular}
+\caption{Convergent evolution, independently in both arms: identical step types, identical
+topology, near-identical dependency sets. The differences are cosmetic --- \armA{} names a tool
+step's query source relatively (\texttt{\$history[-1]}), \armB{} absolutely
+(\texttt{\$history[1]/[3]/[5]}), functionally equivalent on a linear chain --- plus one dropped
+skip-edge in \armA's step 6 ($[1,5]$ vs $[1,3,5]$). Both operators find ``deepen every hop, drop
+the summariser.'' (\texttt{\$outer} = the claim under verification; \texttt{\$history[k]} = the
+output of step $k$, \texttt{[-1]} = the previous step.)}
+\end{table}
+
+\subsection{How \armB{} evolved it: the base\,$\to$\,best lineage}
+\label{sec:lineage}
+The best \armB{} child sits at the end of a clean four-mutation lineage from the seed. Every
+child is a structured slot-diff of its parent, so the whole path is legible as a sequence of
+typed edits --- a trail the free-rewrite arm lacks, since each of its children is an independent
+whole-document re-emission with no operator-native diff (its deltas would have to be
+reconstructed post hoc).
+
+Read Fig.~\ref{fig:lineage} left to right and the graph is the story. \textbf{gen2} fans
+skip-edges into the two query steps (\#4,\,\#6) so each hop's query sees the whole accumulated
+history --- the decisive edit (train $0.753 \to 0.847$), a coordinated seven-step rewrite in
+which every tool step also becomes \texttt{retrieve\_deep} and the summarise steps flip to
+query-generators. \textbf{gen3} strips those fan-ins back to a clean linear chain while
+rewriting the reasoning prompts ($+0.009$). \textbf{gen4} re-adds a selective subset of
+skip-connections for the final $+0.002$. base\,$\equiv$\,gen1 carries no change at all: the
+first mutation was a representable no-op. Because each child is a diff against a known parent,
+the model touches only the wiring it means to --- never re-emitting (and re-risking) the
+untouched steps.
+
+\begin{figure}[p]\centering
+\includegraphics[width=\textwidth,height=0.92\textheight,keepaspectratio]{lineage_graph.png}
+\caption{\armB's winning lineage as a \textbf{dependency graph}, one column per program
+(base\,$\equiv$\,gen1\,$\to$\,gen4). Each column is the seven-step pipeline drawn top-to-bottom;
+every node is a step, colored by type (\textcolor{accent}{blue}~=~\texttt{retrieve}/%
+\texttt{retrieve\_deep} tool, \textcolor{bad!70!black}{orange}~=~LLM) and labelled with its role.
+\textbf{Arrows are the step \texttt{dependencies}} --- the wiring that defines the DAG. An edge is
+grey when it is unchanged from the parent, \textcolor{good}{solid green} when the mutation
+\emph{added} it, and \textcolor{bad}{dashed red} when it \emph{removed} it; a node is outlined in
+\textcolor{bad}{red} when any of its fields changed versus the previous generation. The italic line
+under each new generation is the CARL structured-diff operator's own stated change --- its words,
+not a reconstruction.}
+\label{fig:lineage}
+\end{figure}
+
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{llccc}
+\toprule
+program & structural change vs.\ parent & fitness (train soft) & test soft & test disc.\ (\% $\pm$ SE) \\
+\midrule
+base (seed)     & ---                              & ---   & 0.752 & 44.0 $\pm$ 2.9 \\
+gen 1           & no-op (structurally identical)   & 0.753 & 0.763 & 47.7 $\pm$ 2.9 \\
+gen 2           & rewire every hop; \texttt{+}skip-edges & 0.847 & 0.848 & 64.3 $\pm$ 2.8 \\
+gen 3           & prune fan-ins to linear chain    & 0.856 & 0.859 & 66.7 $\pm$ 2.7 \\
+gen 4 (best)    & re-add selective skip-edges      & \textbf{0.858} & \textbf{0.862} & \textbf{\textcolor{good}{68.0 $\pm$ 2.7}} \\
+\midrule
+\armA{} best (free rewrite) & --- (no inspectable diff) & 0.843 & 0.853 & 67.3 $\pm$ 2.7 \\
+\bottomrule
+\end{tabular}
+\caption{Held-out test payoff of \emph{every} program on the lineage ($n=300$ test claims; fitness
+is the train soft-coverage objective, 300 train claims). The $\pm$ on discrete coverage is the
+binomial claim-sampling SE, $\sqrt{p(1-p)/300}$; it captures test-set sampling only --- executor
+re-draw noise comes on top. Per-claim soft scores were not persisted, so the soft columns carry
+point values only. Held-out discrete coverage climbs
+monotonically down the four-mutation path ($44.0\to47.7\to64.3\to66.7\to\textbf{68.0}$) in this
+single draw, soft coverage tracking in lockstep; only the gen1$\to$gen2 jump ($+16.6$ pts)
+clearly exceeds the noise floor. base and gen1 are the \emph{same} structure yet score $44.0$ vs $47.7$: that
+$\sim$3.7-pt gap is the non-deterministic \texttt{Qwen3-8B} executor's noise floor, the band
+against which per-generation deltas --- and the final $68.0$ vs $67.3$ winner comparison ---
+should be read. On held-out data the two arms' winners are a statistical tie.}
+\label{tab:lineagetest}
+\end{table}
+
+\noindent Two structural observations. First, the operator can emit a \emph{no-op} diff
+(\emph{base\,$\to$\,gen1}): keeping every slot unchanged is a representable, valid move --- wasted
+compute, but never a malformed child. Second, the load-bearing mutation (\emph{gen1\,$\to$\,gen2})
+is a \emph{coordinated multi-field, multi-step rewrite} --- tool swaps, step-type flips, and
+dependency rewiring together --- yet it is expressed as one structured diff that the compiled
+schema guarantees is well-formed. The very edit that is most likely to corrupt a free-form
+re-emission (touch every step at once) is exactly where the diff's constraints pay off.
+
+\partrule{Part II --- top-tier mutator: \texttt{Qwen3-235B-A22B-Thinking}}{full 250-mutant paired run --- does the diff's edge survive a frontier-scale mutator?}
+
+\section{Results (Qwen mutator)}
+\label{sec:resultsq}
+
+\subsection{Validity funnel --- 100\% vs.\ a serving artifact}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+full 250-mutant run & \armA{} (rewrite) & \armB{} (tool diff) \\
+\midrule
+mutation LLM calls (incl.\ retries) & 265 & 268 \\
+pre-persist generation failures & 9 (no code extracted) & 17 (call errors; \textbf{0 schema}) \\
+children persisted & 250 & 250 \\
+\quad still executing at stop (excluded) & 4 & 5 \\
+\midrule
+\textbf{completed evaluations} & \textbf{246} & \textbf{245} \\
+\quad valid & 211 & \textbf{245} \\
+\quad invalid & 35 & \textbf{\textcolor{good}{0}} \\
+\qquad of which malformed wire-JSON & \textcolor{bad}{34 (13.8\%)} & \textbf{\textcolor{good}{0}} \\
+\qquad other (well-formed, failed validation) & 1 & 0 \\
+\textbf{valid yield among completed} & 85.8\% & \textbf{\textcolor{good}{100.0\%}} \\
+\bottomrule
+\end{tabular}
+\caption{On completed evaluations the diff arm is clean: 245 of 245 valid, zero malformed,
+and --- notably --- \textbf{zero schema rejections in 268 calls} (the gemini pair had 2), so the
+compiled grammar never even had to bounce a payload. Operational waste remains upstream: 17
+pre-persist failures, transient LLM-call errors (proxy timeouts on the thinking model), each
+costing one retried call, nothing persisted. \armA's 34 malformed children look like a
+\emph{serving artifact}, not model confusion: every one is \emph{head-truncated} --- the
+document begins mid-stream (typically at \texttt{system\_prompt}, the opening \texttt{\{"}
+clipped) --- consistent with a structured-output defect of the local serving stack under long
+thinking-model emissions. \armA's true content-level failure rate is \textbf{1/246 = 0.4\%}: one
+well-formed document that failed chain validation. (Funnel rows again do not close exactly:
+$265-9=256$ vs 250 persisted in \armA{} --- six calls unclassifiable from the logs --- and
+$268-17=251$ vs 250 in \armB.)}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_overview_qwen.png}
+\caption{Left: per-child fitness and best-so-far. \armA's invalid crosses dot the floor line
+(the head-truncation artifact); \armB's floor is empty. \armB{} jumps early (its winner exists
+by rank 60) and plateaus; \armA{} grinds upward and posts its best near the very end (rank 236).
+Right: the validity funnel --- \armB{} keeps every completed child.}
+\end{figure}
+
+\noindent\textbf{The same lesson from the other end of the document.} Part~I's residual
+free-rewrite failures were tail-truncated (OpenRouter/gemini); Part~II's are head-truncated
+(local vLLM-style stack under a thinking model). Different providers, different ends, same
+class: \emph{a whole-document rewrite is one long fragile emission, and each of the two stacks
+we ran on found its own way to cut it}. The diff's slot-local payloads plus provider-side
+grammar were untouched on both --- zero persisted malformed children in either diff run; and
+had an outer diff response been truncated, the grammar-checked parse would have failed
+pre-persist rather than persisting a corrupt genome.
+
+\subsection{Fitness --- a tie at the top, wider dispersion below}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+completed children & \armA{} (rewrite) & \armB{} (tool diff) \\
+\midrule
+best child & \textbf{0.824} & 0.819 \\
+child mean $\pm$ SD & $0.757 \pm 0.070$ & $0.720 \pm 0.129$ \\
+child median & 0.768 & 0.758 \\
+seed (executor re-score) & 0.734 & 0.743 \\
+\bottomrule
+\end{tabular}
+\caption{Best fitness is a tie: the 0.005 gap is a quarter of the 0.021 seed re-score band ---
+and it is \armA{} that noses ahead this time, despite \emph{fewer} valid draws (211 vs 245), so
+best-of-$N$ bias cannot explain it. \armA's winner arrives at chronological rank 236/250; \armB's
+at rank 60, never beaten for the remaining 190 children. \armB's lower mean is a
+\emph{dispersion} story, not short chains alone: restricted to 7-step children the gap persists
+(\armA{} $0.766 \pm 0.044$, $n{=}171$ vs \armB{} $0.735 \pm 0.131$, $n{=}175$) --- \armB{}
+takes bolder edits with a heavy low tail at matched topology, where its median (0.768) stays
+close to \armA's (0.773). The 70 \armB{} children below 7 steps (mean 0.682;
+\S\ref{sec:structq}) add a further drag on the mean.}
+\end{table}
+
+\subsection{Held-out test coverage}
+\label{sec:benchcmpq}
+Same protocol as Part~I: $n=300$ held-out HoVer claims, discrete coverage $=1$ iff every gold
+title is retrieved, plus soft coverage. Programs evaluated: the seed (fresh re-score), both
+winners, and \armB's decisive intermediate generation.
+
+Part~II generalises less dramatically than Part~I. Both winners clear the seed ($48.3 \pm 2.9$)
+--- \armA{} $59.0 \pm 2.8$, \armB{} $56.7 \pm 2.9$ (binomial claim-sampling SE, $n=300$) --- but
+the margins over the prior sweep's without-feedback best
+(56.0, Table~\ref{tab:benchcmp}) are 0.7--3.0 points, inside the $\sim$3.7-pt single-draw noise
+floor; there is no Part~I-style 11-point clearance here. The held-out ranking also scrambles the
+train ranking: \armB's \emph{intermediate} gen-2 posts the best held-out score of the whole pair
+(61.0) while its train-fitter child gen-3 drops back to 56.7. Two readings, both honest: between
+the arms, held-out rank is a coin flip at this noise level; and train gains past gen-2 did not
+transfer --- consistent with the final prompt-only tweak fitting the train draw, or simply with
+noise. Soft coverage tells the same story in miniature (seed 0.767; all three evolved programs
+0.816--0.833).
+
+\begin{table}[H]\centering\small
+\begin{tabular}{lccc}
+\toprule
+program & train soft & test soft & test disc.\ (\% $\pm$ SE) \\
+\midrule
+base (seed)                     & ---            & \qTseedS & \qTseedD{} $\pm$ 2.9 \\
+\armB{} gen 2 (rewire)          & 0.804          & \qTgS    & \qTgD{} $\pm$ 2.8 \\
+\armB{} gen 3 (best)            & 0.819          & \qTbS    & \qTbD{} $\pm$ 2.9 \\
+\armA{} best (free rewrite)     & \textbf{0.824} & \qTaS    & \qTaD{} $\pm$ 2.8 \\
+\bottomrule
+\end{tabular}
+\caption{Held-out generalisation of the Part~II winners and \armB's lineage ($n=300$). $\pm$ is
+the binomial claim-sampling SE, as in Table~\ref{tab:lineagetest}; soft columns are point values
+(per-claim scores not persisted). The evolved programs' lifts over the seed clear 2--3~SE of the
+difference, but every gap \emph{between} evolved programs is $\lesssim$1~SE --- the held-out ranking
+is unresolved at this sample size. These rows also fill the bottom block of
+Table~\ref{tab:benchcmp} --- the closest available comparison against the prior
+feedback-condition sweep under the same mutator.}
+\label{tab:lineagetestq}
+\end{table}
+
+\subsection{Token cost --- no reasoning split on the proxy}
+\label{sec:tokensq}
+The proxy serving \texttt{Qwen3-235B-Thinking} reports total completion tokens only --- the
+thinking channel is not itemised on either arm (the split below is structurally unavailable,
+unlike Part~I where it is now fully measured). Totals are still cross-arm comparable: output
+\emph{includes} thinking on both arms.
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+mutation side, full run (Qwen-235B) & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+tokens in & 1{,}512{,}046 & 1{,}424{,}748 & $-5.8\%$ \\
+tokens out (total, incl.\ thinking) & 2{,}278{,}810 & 2{,}629{,}263 & $+15.4\%$ \\
+LLM calls (incl.\ retries) & 265 & 268 & $+1\%$ \\
+\bottomrule
+\end{tabular}
+\caption{The thinking model generates more than it reads on both arms. \armB{} spends 15\% more
+output --- on a thinking model the diff cannot save total output, because reasoning (the bulk)
+scales with the \emph{decision}, not the payload; Part~I's measured split (79--87\% reasoning)
+says the payload economy is real but small against the thinking channel. \armB{} reads 6\% less:
+the schema-bearing prompt is cheaper than \armA's full-document-plus-instructions prompt at this
+tokenizer.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_tokens_qwen.png}
+\caption{Left: output tokens per mutation call (10-call rolling mean) --- \armB{} runs
+consistently hotter, its extra thinking driven by the slot-choice decision. Right: cumulative
+input/output over the run.}
+\end{figure}
+
+\subsection{Cost/quality frontier --- the winner for a quarter of the budget}
+\label{sec:paretoq}
+Same attribution as Part~I (\texttt{created\_at} ordering), priced at the cheapest OpenRouter
+rate for \texttt{Qwen3-235B-A22B-Thinking} (\$0.1495/M in, \$1.495/M out) for comparability ---
+the actual serving is self-hosted.
+
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+mutation-model \$ (OpenRouter cheapest) & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+total run spend & \$3.63 & \$4.14 & $+14\%$ \\
+\midrule
+\textbf{cost to the winning program} & \$3.42 & \textbf{\textcolor{good}{\$1.02}} & \textbf{$-70\%$} \\
+\quad winner reached at (chrono.\ rank) & 236/250 (94\%) & \textbf{\textcolor{good}{60/250 (24\%)}} & far earlier \\
+\quad winner fitness (train soft) & 0.824 & 0.819 & tie (noise band) \\
+\midrule
+cost per \emph{valid} program & \$0.0172 & \$0.0169 & parity \\
+budget wasted on invalid children & \textcolor{bad}{\$0.52 (14.2\%)} & \textbf{\textcolor{good}{\$0.00}} & --- \\
+\bottomrule
+\end{tabular}
+\caption{The retrospective timing gap widens at the top end: \armB's never-beaten winner exists
+after 24\% of the run for \textbf{\$1.02}; \armA's does not exist until 94\% --- stopping
+\armA{} early at \armB's \$1.02 mark would have forfeited nearly all its eventual gain.
+Cost-per-valid is parity (\armA's 14\% waste on head-truncated children is offset by \armB's
+heavier thinking). At the illustrative OpenRouter prices used throughout, the whole pair cost
+\$7.78 against Part~I's \$39.59 --- about $5\times$ cheaper for comparable peaks; actual
+economics depend on serving costs.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_pareto_qwen.png}
+\caption{\textbf{Left:} best-so-far train fitness vs.\ cumulative mutation dollars --- \armB{}
+jumps to its plateau by \$1.02; \armA{} climbs in steps and crosses only at the very end of its
+budget. \textbf{Right:} cost-to-program vs.\ held-out test discrete coverage for the evaluated
+programs of Table~\ref{tab:lineagetestq}.}
+\end{figure}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_waste_qwen.png}
+\caption{\textbf{Left:} budget split into productive and wasted spend --- \armA{} burns \$0.52
+(14.2\%) on head-truncated children; \armB{} wastes \$0.00. \textbf{Right:} cost per valid
+program --- parity at $\approx$\$0.017, the waste offset by thinking-token overhead.}
+\end{figure}
+
+\subsection{Structural exploration --- the diff explores \emph{wider} under a strong mutator}
+\label{sec:structq}
+Part~I's pattern inverts. \armA's valid children stay near the seed topology:
+$\{7\!:\!171,\ 6\!:\!27,\ 5\!:\!12,\ 4\!:\!1\}$ (81\% at 7 steps, nothing below 4). \armB's
+spread across the whole admissible range:
+$\{7\!:\!175,\ 6\!:\!36,\ 5\!:\!16,\ 4\!:\!11,\ 3\!:\!3,\ 2\!:\!4\}$ --- 34 children at 2--5
+steps, including deliberate 2-step probes. With a mutator strong enough to reason about
+topology, the typed slot grammar functioned here as an \emph{exploration} instrument: pruning to
+a 4-slot chain is one legal diff, whereas the free rewriter, re-emitting everything, gravitated
+to reproducing the shape it was shown. Those short probes account for part --- not all; see the
+dispersion note above --- of \armB's lower child mean; the return is topology coverage, at no
+cost to the peak.
+\begin{figure}[H]\centering
+\includegraphics[width=0.72\textwidth]{ab_nsteps_qwen.png}
+\caption{Chain-length distribution of valid children under the Qwen mutator. \armB{} (blue)
+covers 2--7 steps; \armA{} (red) never goes below 4 and concentrates at the seed's 7.}
+\end{figure}
+
+\section{The winning chains (Qwen) --- divergent architectures}
+\label{sec:chainsq}
+Unlike Part~I, the arms do \emph{not} converge. Under the frontier mutator each operator found a
+genuinely different retrieval strategy --- beating Part~II's seed by 0.09 (\armA) and 0.08
+(\armB) train soft:
+
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{cllll}
+\toprule
+ & \multicolumn{2}{c}{\armA{} best (0.824, gen 9)} & \multicolumn{2}{c}{\armB{} best (0.819, gen 3)} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+step & type & step content & type & step content \\
+\midrule
+1 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$outer)} & \textcolor{accent}{tool} & \texttt{retrieve(\$outer)} \\
+2 & \textcolor{bad!70!black}{llm} & 2nd-hop query, branch 1 \hfill $[1]$ & \textcolor{bad!70!black}{llm} & 2nd-hop query \hfill $[\,]$ \\
+3 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[2]$ & \textcolor{accent}{tool} & \texttt{retrieve(\$hist[1])} \hfill $[2]$ \\
+4 & \textcolor{bad!70!black}{llm} & 2nd-hop query, branch 2 \hfill $[1,2,3]$ & \textcolor{bad!70!black}{llm} & ``summarise'' $\to$ query \hfill $[\,]$ \\
+5 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[4]$ & \textcolor{bad!70!black}{llm} & 3rd-hop query \hfill $[\,]$ \\
+6 & \textcolor{bad!70!black}{llm} & combine $\to$ 3rd-hop query \hfill $[1,3,5]$ & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[4])} \hfill $[5]$ \\
+7 & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[-1])} \hfill $[6]$ & \textcolor{accent}{tool} & \texttt{retrieve\_deep(\$hist[3])} \hfill $[4]$ \\
+\bottomrule
+\end{tabular}
+\caption{Two different answers to the same task. \armA's winner is \textbf{evidence-conditioned
+branch-and-merge}: two parallel second-hop query branches, each reading the first-hop passages,
+merged by a combiner that issues the third hop --- all \texttt{retrieve\_deep}. \armB's winner is
+\textbf{claim decomposition}: three query-generating LLM steps whose dependency sets are
+\emph{empty} (they read only the claim), feeding four retrievals, the last two
+\texttt{retrieve\_deep} in \emph{parallel} terminal position. Since fitness is the union of gold
+titles over all tool outputs, parallel claim-conditioned probes are a legitimate strategy ---
+query \emph{diversity} substitutes for evidence chaining. Note the vestigial title: \armB's step
+4 still says ``summarise second-hop evidence'' but its inputs were cut by the gen-2 rewire; it
+now functions as another claim-conditioned query generator whose output step 7 retrieves.}
+\end{table}
+
+\subsection{How \armB{} evolved it: two mutations, the second prompt-only}
+\label{sec:lineageq}
+\armB's winner is only \textbf{two diffs} from the seed, and the operator's own logged
+justifications narrate the search:
+\begin{itemize}
+  \item \textbf{seed $\to$ gen 2} ($0.743 \to 0.804$, $\Delta +0.061$): a coordinated rewire.
+  The operator's stated change: \emph{``Removed first summarization step and added fourth
+  retrieval hop using two-hop summary: the summarization step discarded critical evidence
+  fragments needed for multi-hop reasoning, and the fourth hop recovers missing gold articles by
+  re-querying''} --- acting, per its justification, on a ranked program insight against the lossy
+  first-hop summariser. One diff: drop a step, add a fourth tool step, retype two tool steps to
+  \texttt{retrieve\_deep}, rewire the query sources.
+  \item \textbf{gen 2 $\to$ gen 3 (best)} ($0.804 \to 0.819$): \textbf{a
+  single-field, prompt-only edit}. Mutation archetype (the operator's self-selected edit
+  category): \emph{Precision Optimization}; justification:
+  \emph{``the program is at the frontier but the window trend is flat \dots without altering the
+  proven topology, as previous structural changes regressed.''} The whole diff is one
+  \texttt{keep} slot gaining a \texttt{reasoning\_questions} field: \emph{``What specific fact is
+  missing to verify the claim? How can this fact be expressed as a search query?''} Every other
+  slot: \texttt{keep}, untouched.
+\end{itemize}
+That last mutation is the legibility argument in miniature: the winning edit of a 250-child run
+under a frontier mutator is \emph{readable verbatim} --- one prompt field, two short questions,
+stated intent --- because the operator emits typed diffs. The free-rewrite arm's gen-9 winner
+offers no such trail: nine whole-document re-emissions whose actual deltas would have to be
+reverse-engineered.
+
+\begin{figure}[p]\centering
+\includegraphics[width=\textwidth,height=0.92\textheight,keepaspectratio]{lineage_graph_qwen.png}
+\caption{\armB's Part~II winning lineage (base $\to$ gen2 $\to$ gen3), same visual grammar as
+Fig.~\ref{fig:lineage}: columns are programs, nodes are steps (\textcolor{accent}{blue} tool /
+\textcolor{bad!70!black}{orange} LLM), \textcolor{good}{green} edges added, \textcolor{bad}{red
+dashed} removed, red outline = fields changed. The gen-2 column shows the rewire: the first
+summariser gone, a fourth retrieval added terminally, the LLM steps' evidence edges cut ---
+turning the chain from sequential evidence-chaining into parallel claim-decomposition. The gen-3
+column is visually almost identical to gen-2 --- a single red-outlined node (step 2) with no
+wiring change: the prompt-only mutation described above.}
+\label{fig:lineageq}
+\end{figure}
+
+\section{What the first arm-A runs measured: structured-output harness hygiene}
+\label{sec:artifact}
+This report's arm-A runs are re-runs. The original pair produced the intended headline ---
+\emph{``even a strong mutator emits malformed JSON in 38\% of free rewrites''} --- and it did not survive an
+audit. The episode is worth a section because the failure mode is general to any harness that
+pairs a prompt with a structured-output schema.
+
+\subsection{The bug}
+The shared mutation agent's structured-output model carried a field description written for
+Python-genome problems: \texttt{MutationStructuredOutput.code} was described as \emph{``complete
+mutated Python source code \dots NEVER put JSON''} --- while the HoVer problem prompt instructed
+\emph{``\texttt{code} is one COMPLETE wire-format JSON document --- not Python.''} Two
+instructions at war inside one call. Gemini followed the schema description (emitting Python) in
+$\sim$36\% of calls; Qwen, notably, never did --- its pre-fix penalties were already the
+head-truncation serving artifact of \S\ref{sec:resultsq}, misfiled under the same error label.
+
+\subsection{Decomposition of the ``malformed'' children}
+Content inspection of every penalty child (a child whose evaluation drew the $-1000$ catch-all
+penalty fitness) in the original runs:
+\begin{itemize}
+  \item \textbf{gemini (armA, 93 penalties):} 87 were \emph{syntactically valid Python}
+  (\texttt{def entrypoint():\,\dots}) --- the model doing exactly what the schema description
+  asked --- plus 2 truncations, 1 bad escape, 1 control character, 2 well-formed-but-invalid.
+  True document-syntax breakage: \textbf{4/242 $\approx$ 1.7\%}, not 38\%.
+  \item \textbf{Qwen (armA, 29 penalties, partial run):} 28 head-truncated fragments and 1
+  well-formed-but-invalid --- i.e.\ Qwen's failures were \emph{never} the schema contradiction;
+  they were already the serving artifact that persists in the fixed re-run
+  (\S\ref{sec:resultsq}).
+\end{itemize}
+The fix (a format-agnostic \texttt{code} description) plus full re-runs moved gemini's malformed
+rate $38\% \to 3.3\%$ --- and left Qwen's essentially unchanged ($\sim$12\% $\to$ 13.8\%),
+confirming the two models were failing for entirely different reasons that a single
+``malformed'' error kind had collapsed into one number.
+
+\begin{eli5}
+The mutator was handed a form whose cover letter said ``answer in JSON'' while the fine print on
+the answer box said ``answer in Python, never JSON.'' Some models trust the cover letter, some
+the fine print --- and everything written in Python got stamped MALFORMED by a grader expecting
+JSON. The fix was to make the fine print agree with the cover letter. Arm~B never had this
+problem: its answer box \emph{physically} only accepts one format --- there is no fine print to
+disagree with.
+\end{eli5}
+
+\subsection{Lessons}
+\begin{enumerate}
+  \item \textbf{Schema descriptions are prompts.} A structured-output field description competes
+  with the instruction text for the model's obedience; audit both sides of every call.
+  \item \textbf{Taxonomies need content inspection.} The error-kind label said
+  \texttt{json\_parse\_error} for all 93 children; the contents said ``87 valid Python.'' A
+  penalty bucket is a claim about the \emph{harness} until the payloads are read. (Likewise,
+  \armB's 3 gemini ``invalid'' children turned out to be evaluator crashes with perfectly
+  parseable genomes --- a $-1000$ catch-all conflates genome defects with infra failures.)
+  \item \textbf{Grammar-side constraints are immune to this class.} \armB's numbers are
+  identical before and after the fix, because under a compiled \texttt{json\_schema} grammar
+  the contradiction never gets a vote: the fine print cannot override what is sampleable. The
+  diff's zero-malformed record thus covers not only model error but \emph{harness} error --- the
+  category this section exists to document.
+\end{enumerate}
+
+\section{Cross-model synthesis --- what shrinks, what holds}
+\label{sec:synthesis}
+The planned ``malformed-JSON ladder'' (weak llama 40\% $\to$ gemini 38\% $\to$ Qwen $\sim$12\%
+$\to$ schema 0\%) died in the audit: its middle rungs were measuring a harness bug and a serving
+artifact, not model JSON competence. What replaces it is sharper:
+
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{llll}
+\toprule
+arm-A failure class & Part~I (gemini) & Part~II (Qwen-235B) & \armB{} (both) \\
+\midrule
+harness artifact (schema/prompt war) & 38\% $\to$ \textbf{0} after fix & never occurred & unrepresentable \\
+truncated emission (attributed to serving stack) & 3.3\% (tail-cut) & 13.8\% (head-cut) & none persisted \\
+true content defect (well-formed, invalid) & $\sim$0 & 0.4\% & 0 \\
+\bottomrule
+\end{tabular}
+\caption{Where free-rewrite children actually die, by cause. Model IQ was never the story: with
+the harness honest, \emph{neither} strong mutator meaningfully miswrites JSON. What both stacks
+do is \emph{truncate long single-string emissions} --- from opposite ends --- and only the
+whole-document rewrite ships a payload long enough to be at risk. The diff is robust not just to
+model error but to the prompt bug and to both serving stacks' quirks: \textbf{zero persisted
+malformed children in both diff runs}.}
+\end{table}
+
+\noindent\textbf{What shrinks with mutator strength.} The fitness margin: Part~I leans \armB{}
+(+0.015 best), Part~II leans \armA{} (+0.005) --- both inside the 0.021 same-genome re-score
+band. So does the waste margin as a share of spend that \emph{matters}: cost-per-valid-program
+is parity in both pairs (\$0.084 vs \$0.083; \$0.0172 vs \$0.0169). A strong mutator makes the
+free rewrite \emph{survivable}: you lose 3--14\% of children to truncation and match the diff's
+peak.
+
+\medskip\noindent\textbf{What holds at every strength.}
+\begin{itemize}
+  \item \textbf{Validity of persisted genomes is categorical.} 0 malformed for the diff in both
+  its runs; in Part~II, 0 invalid of any kind and 0 schema rejections in 268 calls.
+  (Operational waste --- transient call errors, one no-op diff --- remains.)
+  \item \textbf{The winner arrives early (retrospectively).} Chronological rank 80/254 (31\%)
+  and 60/250 (24\%) for the diff, vs 131/252 (52\%) and 236/250 (94\%) for the rewrite;
+  cost-to-winner \textbf{$-36\%$} and \textbf{$-70\%$}. In these runs, constrained local edits
+  climbed fast from a working parent and plateaued; whole-document rewriting drifted toward its
+  peak, in Part~II finding it only in the final 6\% of the budget.
+  \item \textbf{Legibility.} Part~I's winning lineage reads as four typed edits with stated
+  intent; Part~II's winner is two diffs, the second a \emph{single prompt field}. The rewrite
+  arms' winners (gen 4 and gen 9) have no operator-native path; their deltas would have to be
+  reconstructed post hoc from whole-document emissions.
+  \item \textbf{Structural range.} Under the strong mutator the diff explored 2--7-step
+  topologies while the rewrite stayed at 4--7 hugging the seed's shape --- the grammar
+  functioned as an exploration instrument here, at a measurable mean-fitness dispersion cost and
+  no cost to the peak.
+\end{itemize}
+
+\medskip\noindent\textbf{Two asides the pair design surfaced.} First, architecture: the two
+Part~I winners converged on the same deepen-and-accumulate chain, but the two Part~II winners
+solved retrieval \emph{differently} (evidence-conditioned branching vs.\ claim decomposition) ---
+in this pair, operator choice co-varied with \emph{which} solution family the search found, not
+just how safely it got there (one replicate; suggestive, not established). Second, economics: the self-hosted frontier mutator delivered
+comparable peaks at OpenRouter-priced \$7.78 for the whole pair vs.\ \$39.59 for gemini ---
+at these illustrative prices, reasoning-token rates rather than capability drove the bill;
+actual serving economics differ.
+
+\section{Engineering deliverable: per-candidate executor token accounting}
+\label{sec:tokentrack}
+These runs carry \emph{no} per-candidate executor tokens; the only executor figure available is
+a shared-proxy aggregate ($\approx$132M tokens for the Part~I pair, proxy Prometheus counter, no
+per-arm split). The cause: the chain executor (\texttt{Qwen3-8B}) already captured per-call
+\texttt{prompt\_tokens}/\texttt{completion\_tokens} in its \texttt{CallLog}, but the chain
+runners call \texttt{client.copy()} for every concurrent LLM call and the base \texttt{copy()}
+hands out a \emph{fresh} log list for thread-safety --- so usage landed in throwaway copies, the
+parent's logs stayed empty, and \texttt{validate()} discarded it.
+
+That gap is now closed. \texttt{problems/chains/usage.py} adds a \texttt{LogAggregatingLLMClient}
+whose \texttt{copy()} shares one log list across the fan-out, plus \texttt{usage\_totals()}
+(prompt/completion/total tokens, \texttt{n\_llm\_calls}, \texttt{llm\_cost}) and a
+\texttt{ZERO\_USAGE} constant. It is wired into \texttt{full7/validate.py} (success and
+early-reject paths) and refactors the summarizer validator onto the same helper; four unit tests
+cover the copy-sharing invariant. The same maintenance pass fixed the mutation-side
+instrumentation: \texttt{tokens\_reasoning} is now emitted on \emph{all} \texttt{LLM\_CALL}
+paths (it was silently dropped by the stock mutation agent --- the gap that blinded the pre-fix
+token analysis), which is why Part~I carries a full reasoning split. \textbf{Future} HoVer runs
+will additionally carry per-candidate executor tokens in program metrics, visible via
+\texttt{gigaevo top} and the A/B analyzer.
+
+\section{Verdict}
+\label{sec:verdict}
+\textbf{Q1 --- does the diff generalise to tool-bearing genomes?} Yes. In both of its runs the
+tool-aware grammar persisted zero malformed children, edited tool steps as first-class slots
+(retyping \texttt{retrieve} $\to$ \texttt{retrieve\_deep}, moving query sources, rewiring
+dependencies), and in Part~II never triggered a single schema rejection in 268 calls. Residual
+operational waste (transient call errors, one no-op diff) is disclosed above.
+
+\medskip\noindent\textbf{Q2/Q3 --- does the guarantee matter under strong mutators?} Not for the
+reason we expected. The naive version --- ``strong models still can't emit JSON'' --- is dead:
+that number was our own harness bug, and this report documents it rather than buries it
+(\S\ref{sec:artifact}). The considered version survives: a whole-document rewrite is one long
+emission, and \emph{both} serving stacks truncated a slice of them (3.3\% tail-cut, 13.8\%
+head-cut) --- a tax that did not depend on model IQ and that the diff's short, grammar-bound
+payloads avoided on both stacks. In these runs the guarantee covered the whole stack: model,
+prompt, \emph{and} provider.
+
+\medskip\noindent\textbf{The surviving economic case is timing, not waste.} At parity
+cost-per-valid-program, the diff's never-beaten winner existed after 31\% (Part~I) and 24\%
+(Part~II) of the budget --- retrospectively $-36\%$ and $-70\%$ cost-to-winner --- while free
+rewriting needed 52\% and 94\%. Banking that saving online needs a stopping rule; for a search
+loop with any early-stopping or successive-halving discipline, it is the operative number. Peaks are statistical ties in both pairs.
+
+\medskip\noindent\textbf{Recommendation.} Default to the structured diff for wire-JSON genomes
+at both mutator strengths tested, under the conditions studied here (single-parent, memory-off,
+HoVer retrieval chains). Under weak mutators (prior report) it is the difference between a
+search and a syntax lottery; under strong ones it buys earlier winners, zero persisted malformed
+output, wider topology exploration, and lineages you can read --- including, in Part~II, a
+winning mutation that is one auditable prompt field. Keep free rewrite as an occasional
+exploration control: in Part~II it found a genuinely different (branching) architecture and the
+nominal best-fitness, so it still earns a lane as a diversity source where its truncation tax is
+affordable.
+
+\medskip\noindent\textbf{Caveats.} One replicate per arm per pair; no same-config variance floor
+beyond the four seed re-scores (band 0.021); \armB{} runs predate the fixed \armA{} runs
+(identical configs, non-concurrent execution; shared proxy and cluster load uncontrolled); fitness and held-out scores are single stochastic
+draws (executor $T{=}0.6$; base-vs-gen1 puts the held-out noise floor near 3.7 pts); the $\pm$
+on held-out discrete values is binomial claim-sampling SE only ($n=300$), with that re-draw
+noise on top, and per-claim soft scores were not persisted (no $\pm$ on soft columns);
+\texttt{memory=none}, \texttt{num\_parents=1} (no crossover); 4--12 in-flight children per arm
+excluded at stop; Part~II reasoning/content split unavailable (proxy does not itemise thinking);
+dollar figures are OpenRouter-priced tokens, executor excluded; a few mutation calls per run
+are unclassifiable in the logs (funnel rows need not close exactly).
+
+\end{document}

@@ -1,0 +1,132 @@
+schema_version: 2
+contract:
+  identity:
+    name: hover/map-elites-topology
+    task: hover
+    branch: exp/hover-map-elites-topology
+    prereg_commit: d3e8b10
+    pr_number: 142
+    tracking_issue: 158
+  problem:
+    has_test_set: true
+    test_set_path: problems/chains/hover/full/test.py
+    test_set_sha256: 09bdd8cac1702c17f3a12cc17a2664b2a9f3b68503ba57c2a53b3736b467a6b6
+    max_val_test_gap: null
+    fitness_type: fractional
+    metric_name: retrieval_coverage
+  config:
+    num_parents: 1
+    max_elites_per_generation: 8
+    max_mutations_per_generation: 8
+    stage_timeout: 6000
+    dag_timeout: 14400
+    mutation_mode: rewrite
+    significant_change: 0.003
+  runs:
+  - label: V1
+    db: 3
+    prefix: chains/hover/full
+    pipeline: structural_metrics
+    problem_name: chains/hover/full
+    condition: control
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    log_path: logs/V1.log
+    pid: 180530
+    extra_overrides:
+    - evolution=steady_state
+    - scheduling=lpt
+  - label: V2
+    db: 4
+    prefix: chains/hover/full
+    pipeline: structural_metrics
+    problem_name: chains/hover/full
+    condition: control
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    log_path: logs/V2.log
+    pid: 180531
+    extra_overrides:
+    - evolution=steady_state
+    - scheduling=lpt
+  - label: V3
+    db: 5
+    prefix: chains/hover/full
+    pipeline: structural_metrics
+    problem_name: chains/hover/full
+    condition: treatment
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    log_path: logs/V3.log
+    pid: 180532
+    extra_overrides:
+    - evolution=steady_state
+    - scheduling=lpt
+    - algorithm=topology_3d
+  - label: V4
+    db: 6
+    prefix: chains/hover/full
+    pipeline: structural_metrics
+    problem_name: chains/hover/full
+    condition: treatment
+    model_name: Qwen3-235B-A22B-Thinking-2507
+    chain_url: null
+    mutation_url: http://10.232.30.185:4000/v1
+    log_path: logs/V4.log
+    pid: 180533
+    extra_overrides:
+    - evolution=steady_state
+    - scheduling=lpt
+    - algorithm=topology_3d
+  servers:
+  - 10.232.30.185
+  custom_env:
+    OPENAI_API_KEY: sk-gigaevo
+  max_generations: 25
+  stopping_rule:
+    description: ''
+    conditions: []
+    enforce_at: checkpoint
+  baseline:
+    reference: hover/steady-state-v2
+    mean: 83.8
+    metric: soft_fractional_val_coverage
+  tools: []
+lifecycle:
+  status: complete
+  launch:
+    time: '2026-03-30T10:00:00+00:00'
+    commit: c8e32f4
+    confirmed_at: '2026-03-30T10:00:00+00:00'
+  smoke_test:
+    completed: true
+    db: 7
+    generations: 1
+    log_path: smoke_test.log
+    completed_at: '2026-03-29T21:33:14.429662+00:00'
+  treatment_verification:
+    completed: true
+    completed_at: '2026-03-29T21:33:14.429677+00:00'
+telemetry:
+  checkpoints: []
+  mid_run_test_eval: {}
+  checkpoint_analysis: {}
+  treatment_checks:
+    completed: false
+    results: []
+control_plane:
+  watchdog: {}
+  notifications:
+    pr:
+      enabled: true
+      comment_mode: rolling
+    telegram:
+      enabled: true
+      chat_id_env: TELEGRAM_CHAT_ID
+      token_env: TELEGRAM_BOT_TOKEN
+  watchdog_pid: null
+  anomaly_detector_cron_id: null
+  checkpoint_cron_id: null

@@ -1,0 +1,145 @@
+# @package _global_
+# Asymmetric adversarial co-evolution pipeline.
+#
+# Extends adversarial_coevo with role-asymmetric prompt injections between
+# the two populations (Constructor / Improver, often abbreviated G / D):
+#   - Improver runs: SourceCodeInjectionStage shows the opponent's source
+#     code in the mutation prompt (same opponents used for evaluation)
+#   - Constructor runs, Variant 1 ("composition"): composition injection
+#     pre-step hook delivers opponent-improvement events into the mutation
+#     prompt (hook is wired in launch.sh, not pipeline-level)
+#   - Constructor runs, Variant 2 ("gradient_in_prompt"): GradientInPromptStage
+#     shows the opponent's best code as a textual gradient in the mutation
+#     prompt
+#
+# Parametric: n_opponents=k, source_prompt_k=l (l<=k).
+# Default: k=1, l=1 (Improver evaluates against 1 Constructor, sees its source).
+#
+# Requires at run time:
+#   opponent_redis_db=N            (DB of the opponent run)
+#   opponent_redis_prefix=...      (prefix of the opponent run)
+#   feedback_mode=composition|gradient_in_prompt
+#   population_role=constructor|improver  (auto-set per run in launch.sh)
+#
+# Optional overrides:
+#   n_opponents=K        (default: 1)
+#   source_prompt_k=L    (default: 1, L<=K)
+#   d_sees_g_source=true (enables SourceCodeInjectionStage for Improver runs)
+#   d_archive_persistent=true (Improver's archive persists across generations)
+#
+# Treatment verification:
+#   - Improver runs: log "[SourceCodeInjection] showing" after gen 1
+#   - Constructor (gradient_in_prompt): log "[GradientInPrompt] injecting" after gen 1
+#   - Constructor (composition): log "[CompositionInjection] mutation_type=d_improvement" after gen 1
+#
+# Usage (Constructor, composition variant):
+#   python run.py \
+#     problem.name=adversarial/g_d/pop_a \
+#     pipeline=adversarial_asymmetric redis.db=1 \
+#     opponent_redis_db=2 \
+#     opponent_redis_prefix=adversarial/g_d/pop_b \
+#     feedback_mode=composition
+#
+# Usage (Improver):
+#   python run.py \
+#     problem.name=adversarial/g_d/pop_b \
+#     pipeline=adversarial_asymmetric redis.db=2 \
+#     opponent_redis_db=1 \
+#     opponent_redis_prefix=adversarial/g_d/pop_a \
+#     feedback_mode=composition \
+#     d_sees_g_source=true d_archive_persistent=true
+
+defaults:
+  - adversarial_coevo
+
+pipeline:
+  id: adversarial_asymmetric
+  reads_external_memory: false
+  archive_gate_mode: none
+
+archive_gate_enabled: false
+
+# Override sync hook to use programs_processed as the cross-population
+# progress signal: ProgressBasedSyncHook reads the counter that is
+# published before the hook fires, avoiding the mutual-wait deadlock that
+# a generation-based sync would create under SteadyState.
+pre_step_hook:
+  _target_: gigaevo.adversarial.sync.ProgressBasedSyncHook
+  host: ${redis.host}
+  port: ${redis.port}
+  sources:
+    - db: ${opponent_redis_db}
+      prefix: ${opponent_redis_prefix}
+  min_delta: ${sync_min_delta}
+  sync_every_n_epochs: 1
+  timeout: 7200
+  poll_interval: 5.0
+
+# Asymmetric parameters (required overrides at launch)
+feedback_mode: "composition"
+population_role: "constructor"
+n_opponents: 1
+source_prompt_k: 1
+d_sees_g_source: false
+d_archive_persistent: false
+inner_iterations: 1
+
+# Opponent sampling mode (see OpponentSamplingMode enum in opponent_provider.py).
+#   top_k   — deterministic top-K by fitness. Stable IDs across DAG runs →
+#             InputHashCache on FetchOpponentResults hits frequently,
+#             re-using cached evaluations when the archive hasn't rotated.
+#   softmax — softmax fitness-proportional sampling without replacement.
+#             Stochastic → hash changes more often → broader archive
+#             re-evaluation, better exploration but higher eval cost.
+opponent_sampling_mode: "top_k"
+
+# D-G improvement tracker (records which D improved which G and by how much)
+# Used by GradientInPromptStage for per-G-program D selection
+dg_tracker:
+  _target_: gigaevo.adversarial.dg_tracker.DGImprovementTracker
+  host: ${redis.host}
+  port: ${redis.port}
+  db: ${redis.db}
+  prefix: ${problem.name}
+  ttl_seconds: 86400
+
+# Composition injection hook (activated for Arm A G runs via post_step_hook override in launch.sh)
+# CompositionInjectionHook.__call__() delegates to inject(), making it Callable[[], Awaitable[None]]
+composition_injection_hook:
+  _target_: gigaevo.adversarial.composition_injection.CompositionInjectionHook
+  d_provider: ${opponent_provider}
+  g_storage: ${ref:program_storage}
+  dg_tracker: ${dg_tracker}
+
+pipeline_builder:
+  _target_: gigaevo.adversarial.asymmetric_pipeline.AdversarialAsymmetricPipelineBuilder
+  ctx: ${evolution_context}
+  opponent_provider: ${opponent_provider}
+  d_provider: ${opponent_provider}
+  population_role: ${population_role}
+  feedback_mode: ${feedback_mode}
+  n_opponents: ${n_opponents}
+  source_prompt_k: ${source_prompt_k}
+  # per_opponent_timeout is only used by ExecOpponentResultProvider (exec-mode G
+  # runs); CachedOpponentResultProvider (cached-mode D runs) ignores it entirely.
+  # Bound to stage_timeout so exec subprocesses get the same budget as the stage
+  # they run inside, and so cached runs inheriting this base never carry a
+  # surprising smaller value. See pipeline.py for the startup WARNING when a
+  # cached-mode run explicitly overrides this to a non-stage_timeout value.
+  per_opponent_timeout: ${stage_timeout}
+  archive_reeval: false
+  dg_tracker: ${dg_tracker}
+  disable_lineage_on_improver: false
+  lineage_filter:
+    _target_: gigaevo.adversarial.asymmetric_pipeline.LineageFilterConfig
+    min_shared: 1
+    inject_shared_evidence: true
+  opponent_result_mode: ${opponent_result_mode}
+  opponent_sampling_mode: ${opponent_sampling_mode}
+  redis_host: ${redis.host}
+  redis_port: ${redis.port}
+  opponent_sources:
+    - db: ${opponent_redis_db}
+      prefix: ${opponent_redis_prefix}
+  stage_timeout: ${stage_timeout}
+  dag_timeout: ${dag_timeout}

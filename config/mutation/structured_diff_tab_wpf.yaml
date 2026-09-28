@@ -1,0 +1,27 @@
+# @package _global_
+# Schema-constrained positional-slot mutation for reverse-SCM predictor JSON genomes.
+
+problem:
+  dataset: california
+  evaluation_mode: real
+  task_bank: ""
+  task_split: meta_train
+
+problem_context:
+  _target_: problems.tab_wpf.problem_context.TabWpfProblemContext
+  problem_dir: ${problem.dir}
+  dataset: ${problem.dataset}
+  evaluation_mode: ${problem.evaluation_mode}
+  task_bank: ${problem.task_bank}
+  task_split: ${problem.task_split}
+
+mutation_operator:
+  _target_: gigaevo.evolution.mutation.structured_diff.StructuredDiffMutationOperator
+  llm_wrapper: ${ref:llm}
+  allowed_changes:
+    _target_: problems.tab_wpf.allowed_changes.AllowedTabWpfChanges
+    min_nodes: 0
+    max_nodes: 12
+  problem_context: ${problem_context}
+  prompts_dir: ${prompts.dir}
+  prompt_fetcher: ${prompt_fetcher}

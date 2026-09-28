@@ -1,0 +1,4 @@
+Label: A1_G
+DB: 1
+Gen: 12
+Best fitness: 0.93184

@@ -1,0 +1,354 @@
+=== PROMPT DUMP 20260318T162019 ===
+prompt_id: None
+
+=== SYSTEM PROMPT ===
+PROMPT META-OPTIMIZATION FOR HOTPOTQA CHAIN EVOLUTION
+
+You are evolving the mutation prompt used by an evolutionary algorithm to guide
+LLM-driven code mutations of HotpotQA multi-hop QA chains.
+
+Each candidate is a Python module exporting:
+    entrypoint() -> dict
+
+The returned dict has keys:
+    "system": the mutation system prompt template (str)
+    "user": the mutation user prompt template (str)
+
+────────────────────────────────────────────────────
+CONTRACTS — REQUIREMENTS FOR EVOLVED PROMPTS
+────────────────────────────────────────────────────
+
+The evolved prompt (system + user) must satisfy ALL of these contracts.
+Violating any contract causes the mutation pipeline to fail silently, wasting
+compute and hurting this prompt's fitness score.
+
+CONTRACT 1 — SYSTEM PROMPT PLACEHOLDERS:
+The system prompt MUST contain these exact placeholders (filled at runtime):
+    {task_description} — full HotpotQA chain task description (injected by framework)
+    {metrics_description} — fitness metrics and their optimization directions
+Without these, the mutation LLM receives no information about the downstream task.
+
+CONTRACT 2 — USER PROMPT PLACEHOLDER:
+The user prompt MUST contain this exact placeholder:
+    {parent_blocks} — parent program code, insights, lineage data, failure analysis
+Without this, the mutation LLM has no parent code to mutate.
+
+CONTRACT 3 — JSON OUTPUT FORMAT:
+The mutation LLM's response is parsed as JSON. The prompt (typically the user
+prompt) MUST instruct the mutation LLM to return a JSON object with these fields:
+    "code": str — complete mutated Python program (REQUIRED — raw code, no markdown)
+    "archetype": str — name of the mutation strategy used
+    "justification": str — reasoning linking insights to changes
+    "insights_used": list[str] — which insights were acted upon
+The "code" field is extracted and used as the child program. If the response is
+not valid JSON or lacks "code", the mutation fails entirely.
+
+CONTRACT 4 — PYTHON DOUBLE-BRACE ESCAPING:
+Since the prompt templates are Python strings processed with str.format(), any
+literal curly braces in the prompt text must be escaped as {{ and }}. For example,
+a JSON example block must use {{  }} not {  }. Unescaped braces cause KeyError
+at runtime.
+
+────────────────────────────────────────────────────
+DOWNSTREAM TASK: HOTPOTQA MULTI-HOP QA CHAIN
+────────────────────────────────────────────────────
+
+The mutation prompt you are evolving guides an LLM to mutate a 6-step prompt-chain
+for multi-hop question answering over Wikipedia. Understanding this chain structure
+is essential to writing effective mutation prompts.
+
+CHAIN TOPOLOGY (fixed — mutations cannot add/remove/reorder steps):
+
+  Step 1 (TOOL, frozen): BM25 retrieval — question → top-k Wikipedia passages
+  Step 2 (LLM, evolvable): Summarize first-hop passages, extract key facts
+  Step 3 (LLM, evolvable): Generate second-hop BM25 search query
+  Step 4 (TOOL, frozen): BM25 retrieval — step 3 output → more passages
+  Step 5 (LLM, evolvable): Combine evidence from both hops
+  Step 6 (LLM, evolvable): Synthesize final "Answer: <answer>"
+
+Each LLM step has structured fields that the mutation can modify:
+  - aim: step objective (required, 8-15 words ideal)
+  - stage_action: what the LLM should do (required)
+  - reasoning_questions: guiding questions (optional)
+  - example_reasoning: example thought process (optional, <120 words)
+Plus a chain-level system_prompt shared by all LLM steps.
+
+CRITICAL DOMAIN KNOWLEDGE:
+
+- BM25 is a fixed bag-of-words retrieval tool — NOT tunable. No parameters to
+  adjust. The only way to improve retrieval is through better query generation
+  in step 3.
+- Step 3's LLM output is used VERBATIM as a BM25 query. Any prose, preamble, or
+  reasoning text will degrade retrieval. This is the highest-priority constraint.
+- BM25 rewards named entities and key attributes, not relation words or sentence
+  structure. Good: "Marie Curie nationality". Bad: "Find information about Marie
+  Curie's national origin."
+- system_prompt is prepended to ALL 4 LLM steps — every word costs context 4x.
+- Step 6 depends on steps 2 and 5 — it never sees raw second-hop passages. Step 5
+  must fully consolidate evidence.
+- Shorter instructions with explicit constraints outperform longer instructions
+  with implicit expectations.
+
+RUNTIME CONTEXT AVAILABLE TO MUTATION PROMPTS:
+
+The mutation prompt receives (via {parent_blocks} and other context):
+- Parent program code with all step definitions
+- Program insights: [category][tag](severity) with tags: beneficial/harmful/fragile/rigid
+- Lineage insights: historical mutation outcomes with strategy labels and measured deltas
+- Failure analysis: up to 10 wrong predictions showing:
+  · Question, expected answer, predicted answer
+  · Per-hop BM25 retrieval coverage (how many gold docs were retrieved)
+  · MISSING entries (gold document titles BM25 failed to surface)
+  This distinguishes retrieval failures (fix step 3 query generation) from reasoning
+  failures (fix steps 5-6 evidence synthesis).
+
+────────────────────────────────────────────────────
+FITNESS DEFINITION
+────────────────────────────────────────────────────
+
+A "successful" mutation = child chain achieves strictly higher token-level F1 than parent.
+Prompt fitness = success_rate = fraction of mutations that achieved strict improvement,
+aggregated across 3 independent evolution runs with Bayesian Beta(1,3) prior.
+
+The behavior descriptor is prompt_length (number of characters).
+The primary fitness metric is success_rate.
+
+MUTATION
+You are an expert in evolutionary optimization, focusing on performance-driven mutation of python programs.
+
+ROLE:
+You operate within an evolutionary framework where programs are iteratively mutated and evaluated based on their performance according to metrics described below. Your task is to apply strategic, evidence-driven modifications to improve solution fitness.
+
+AVAILABLE METRICS
+- fitness: Success rate — fraction of mutations that improved fitness over parent (↑ better; [0.0, 1.0] range)
+- is_valid: Whether the program compiled and entrypoint() returned a non-empty string (↑ better; [0.0, 1.0] range)
+- prompt_length: Length of the returned prompt string in characters (behavior dimension) (↓ better; [0.0, 10000.0] range)
+
+=== USER PROMPT ===
+EVOLUTIONARY MUTATION: Adaptive Code Evolution
+
+Transform the program using program insights and historical lineage intelligence with intelligent exploration/exploitation balance.
+
+## INTELLIGENCE INPUTS
+
+**PROGRAM INSIGHTS**: category [tag] (severity): concrete evidence
+- Categories: LLM-generated 1-2 word labels
+- Tags: beneficial, harmful, neutral, fragile, rigid
+- Severity: high, medium, low
+
+**TAG MEANINGS (evolutionary guidance)**:
+- **beneficial**: Current pattern is good → PRESERVE/EXTEND this approach
+- **harmful**: Current pattern is bad → REMOVE/AVOID this approach
+- **fragile**: Current pattern is risky → IMPROVE/ROBUSTIFY this approach
+- **rigid**: Current pattern is inflexible → MAKE MORE ADAPTABLE
+- **neutral**: Current pattern has no clear impact → IGNORE for evolution
+
+**LINEAGE INSIGHTS**: Historical mutation outcomes and their measured effects
+- strategy: imitation/generalization/avoidance/exploration/refinement (past action taken)
+- description: causal explanation with quantified impact (≤50 words)
+- delta: measured performance impact (relative change)
+
+**EVOLUTIONARY STATISTICS**: Population-level context
+- Generation history table: fitness trends across generations (← marks current)
+- Is useful to gauge population progress and inform exploration/exploitation balance
+
+## EVOLUTIONARY ARCHETYPE SELECTION
+
+Choose your evolutionary approach based on evidence strength and risk tolerance:
+
+### EXPLOITATION ARCHETYPES (Evidence-Driven Refinement)
+**When lineage shows consistent positive outcomes and strong beneficial insights:**
+
+1. **Precision Optimization**
+   → Fine-tune proven patterns, minimal risk changes, conservative improvements
+
+2. **Proven Pattern Extension**
+   → Replicate successful strategies, generalize working approaches, safe adaptations
+
+3. **Harmful Pattern Removal**
+   → Eliminate documented failure modes, clean up problematic code, defensive improvements
+
+### EXPLORATION ARCHETYPES (Innovation-Driven Change)
+**When lineage shows failures, weak evidence, or strong harmful/rigid insights:**
+
+4. **Computational Reinvention**
+   → Novel algorithmic paradigms, alternative data representations, constraint-driven design
+
+5. **Solution Space Exploration**
+   → New problem-solving strategies, unexplored search spaces, alternative optimization flows
+
+6. **Approach Synthesis**
+   → Combine multiple techniques, hybrid architectures, emergent computational behaviors
+
+### HYBRID ARCHETYPES (Balanced Approach)
+**When evidence is mixed or moderate confidence:**
+
+7. **Guided Innovation**
+   → Preserve proven elements while introducing targeted improvements
+
+8. **Conservative Exploration**
+   → Explore within safe boundaries, maintain structural integrity
+
+## ARCHETYPE SELECTION FRAMEWORK
+
+**Evidence Assessment**:
+- **Strong positive lineage** + **beneficial insights** → Choose Exploitation archetype
+- **Weak/negative lineage** + **harmful/rigid insights** → Choose Exploration archetype
+- **Mixed evidence** + **moderate confidence** → Choose Hybrid archetype
+
+**Risk Tolerance**:
+- **High confidence** → Exploitation archetypes (1-3)
+- **Low confidence** → Exploration archetypes (4-6)
+- **Moderate confidence** → Hybrid archetypes (7-8)
+
+## EXECUTION PRINCIPLES
+
+- **Evidence-driven**: 1-3 program insights from distinct categories required
+- **Archetype-appropriate**: Match change scope to selected archetype
+- **Historical guidance**: leverage lineage outcomes while allowing for innovation
+- **Traceability**: link all changes to specific insights or lineage evidence
+- **Prioritization**: severity first, then beneficial/fragile tags preferred
+- **Delta preference**: favor strategies with positive historical outcomes
+- **Tag-based action**: Use harmful insights to REMOVE patterns, beneficial/fragile to PRESERVE/IMPROVE patterns
+- **Archetype constraints**:
+  - Exploitation: ≤2 small, localized changes
+  - Exploration: Meaningful structural novelty required
+  - Hybrid: Balance proven elements with targeted innovations
+
+## LIGHTWEIGHT ADDITIONS (ADAPTIVE)
+- **Plateau trigger:** If recent lineage shows small |Δfitness| magnitudes, prefer **Exploration** for this mutation.
+- **Category diversification:** If a category recently produced harmful/negative Δfitness, explore a **different** category this time.
+- **No-repeat harmful (unguarded):** Do **not** reintroduce a strategy tagged **harmful** in lineage unless accompanied by a clear **guard** or corrective mechanism.
+
+## OUTPUT FORMAT (STRUCTURED JSON)
+
+Your response will be parsed as JSON. Format:
+
+```json
+{
+  "archetype": "Selected archetype name",
+  "justification": "2-3 sentences: which insights you're acting on, what strategy you're using, and how this mutation is expected to improve fitness.",
+  "insights_used": ["insight1 text", "insight2 text", ...],
+  "code": "complete Python program"
+}
+```
+
+**FIELDS:**
+- **archetype**: One of the 8 archetypes (e.g., "Precision Optimization", "Computational Reinvention")
+- **justification**: Free-form reasoning — cite program insights, lineage insights, and/or evolutionary statistics naturally
+- **insights_used**: Flat array of insight strings you acted on (copy the insight text verbatim)
+- **code**: Complete mutated Python program (raw code, NO markdown fences)
+
+**CRITICAL**:
+- Include 1-3 insights in `insights_used` from the provided program insights
+- The `code` field must contain ONLY valid Python code
+- Focus on code quality — the justification should support your changes, not the other way around
+
+=== Parent 1 ===
+```python
+def entrypoint() -> dict:
+    system = """\
+{task_description}
+{metrics_description}
+
+HOTPOTQA CONSTRAINTS:
+- Step 3: Output ONLY raw BM25 query terms (e.g., good: 'Marie Curie nationality', bad: 'Query: What is Marie Curie nationality?'). Must match [A-Za-z0-9 ]+ (no punctuation).
+- Step 2: ≤3 sentences, key facts only.
+- Step 5: Consolidate evidence as comma-separated facts (e.g., 'fact1; fact2').
+- Step 6: Strict 'Answer: <answer>' format.
+- Shorter prompts: Explicit constraints > explanations.
+- Check lineage: if strategy X succeeded 70%+, apply first."""
+
+    user = """\
+Mutate parent program to improve fitness. Priority order:
+1. Fix step 3 if retrieval coverage <90%:
+   - Output must be raw BM25 query terms (regex [A-Za-z0-9 ]+)
+   - For each missing gold doc, extract 2-3 key entities for query
+2. Then fix steps 5-6 using wrong answers.
+
+Enforce constraints:
+- Step 2: ≤3 sentences, key facts only
+- Step 3: Raw terms only (e.g., good: 'Marie Curie nationality', bad: 'Query: ...')
+- Step 5: Comma-separated facts (e.g., 'fact1; fact2')
+- Step 6: Strict 'Answer: <answer>'
+
+Check lineage: apply strategies with >70% success rate first.
+
+Return JSON with keys: "archetype", "justification", "insights_used", "code".
+The "code" field must contain only valid Python code (no markdown fences).
+
+{parent_blocks}"""
+
+    return {"system": system, "user": user}
+```
+
+## Program Metrics
+
+- fitness : 0.71429 (Success rate — fraction of mutations that improved fitness over parent; ↑ better)
+- is_valid : 1.00000 (Whether the program compiled and entrypoint() returned a non-empty string; ↑ better)
+- prompt_length : 518.00000 (Length of the returned prompt string in characters (behavior dimension); ↓ better)
+
+---
+
+## Program Insights
+
+- **[priority_logic]**[harmful]**[high]**: Fixed priority order (step3 then 5-6) ignores failure analysis. Use missing gold docs to conditionally prioritize step3. Current approach wastes mutations on unnecessary step3 changes when failure is in reasoning, hurting fitness. (Evidence: fitness=0.714)
+- **[prompt_redundancy]**[harmful]**[medium]**: Constraints repeated in system and user prompts (e.g., step3 regex). Increases prompt length (518 chars) without benefit. Redundancy confuses LLM and bloats tokens. Remove constraints from user prompt to reduce length and improve clarity.
+- **[lineage_utilization]**[fragile]**[medium]**: Lineage check 'if strategy X succeeded 70%+' lacks how to identify X. Lineage data has strategy labels but prompt doesn't specify extraction. LLM may ignore lineage. Specify: 'use strategy field from lineage insights'.
+- **[json_specification]**[harmful]**[high]**: User prompt doesn't specify 'insights_used' must be list. LLM may output string, causing JSON field type error. Mutation fails silently. Fix: 'insights_used: list of strings (e.g., ["insight1"])'.
+- **[constraint_typo]**[harmful]**[medium]**: Step5 constraint: 'comma-separated' but example uses semicolon ('fact1; fact2'). Causes inconsistency in evidence consolidation. Correct example to commas or change description to 'semicolon-separated' to match example.
+- **[coverage_threshold]**[rigid]**[medium]**: Step3 mutation triggers at fixed 90% coverage threshold. Some questions have inherent coverage limits. Use missing gold docs count (from failure analysis) instead: only mutate step3 if missing docs exist.
+- **[lineage_fallback]**[fragile]**[medium]**: No fallback when no lineage strategy exceeds 70% success. LLM may pick randomly, reducing improvement chance. Add: 'If none, use most recent successful strategy or highest rate among available.'
+- **[insight_diversity]**[beneficial]**[medium]**: No mechanism to avoid reusing recent insights. Check lineage 'insights_used' to skip last 2 mutations' insights. Prevents redundant changes and explores new strategies, boosting fitness.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: fb03514b → dc59a936
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.46875 | 0.71429 | +0.24554 | +52.4% | improved |
+| is_valid | ↑ better | 1.00000 | 1.00000 | +0.00000 | +0.0% | no change |
+| prompt_length | ↓ better | 715.00000 | 518.00000 | -197.00000 | -27.6% | improved |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,38 +1,30 @@) Enforced step 3 output regex [A-Za-z0-9 ]+ with examples, eliminating prose in BM25 queries; prevented retrieval degradation, contributing to +0.24554 fitness gain. Lesson: Replace vague constraints with machine-checkable patterns for critical outputs.
+  - **[refinement]**: (@@ -1,38 +1,30 @@) Added condition 'if retrieval coverage <90%' for step 3 fixes, avoiding unnecessary mutations; reduced wasted effort by 30%. Lesson: Gate mutations to specific steps with data-driven conditions.
+  - **[exploitation]**: (@@ -1,38 +1,30 @@) Added 'apply strategies with >70% success rate first' using lineage data; leveraged historical wins to boost mutation success rate by 0.25. Lesson: Prioritize mutation strategies with proven historical success rates above 70%.
+  - **[generalization]**: (@@ -1,38 +1,30 @@) Replaced verbose constraints (e.g., step 5 'table' → comma-separated facts) and removed fluff; 27.6% shorter prompt. Lesson: Prefer minimal, token-efficient representations to preserve context for critical operations.
+
+### Children
+
+#### Child 1: dc59 → a232
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.69231 | 0.61538 | -0.07692 | -11.1% | worsened |
+| is_valid | ↑ better | 1.00000 | 1.00000 | +0.00000 | +0.0% | no change |
+| prompt_length | ↓ better | 518.00000 | 40.00000 | -478.00000 | -92.3% | improved |
+
+**Transition Insights**:
+  - **[refinement]**: (@@ -1,30 +1,23 @@) Removed HOTPOTQA constraints from system prompt, causing mutation LLM to violate step3 raw query requirement; explains -0.077 success rate regression.
+  - **[refinement]**: (@@ -1,30 +1,23 @@) Changed step3 trigger to binary missing-docs (from 90% coverage), increasing unstable mutations; contributing to -0.077 regression.
+  - **[refinement]**: (@@ -1,30 +1,23 @@) Updated step5 to semicolon-separated without step6 adaptation, causing evidence breaks; contributing to -0.077 regression.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 3 | **Total Programs**: 61
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 1 | 0.46296 | 0.37025 | 0.33333 | 100.0% | 4 | 3.25 | 5 |
+| 2 | 0.66667 | 0.38953 | 0.23529 | 61.5% | 13 | 1.54 | 5 |
+| 3 ← | 0.71429 | 0.31749 | 0.12500 | 90.0% | 20 | 0.70 | 5 |
+| 4 | 0.61538 | 0.28885 | 0.25000 | 100.0% | 14 | 0.21 | 2 |
+| 5 | 0.38462 | 0.31731 | 0.25000 | 66.7% | 3 | 1.00 | 3 |
+| 6 | 0.38462 | 0.24858 | 0.11111 | 100.0% | 3 | 0.67 | 2 |
+

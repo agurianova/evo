@@ -1,0 +1,45 @@
+# @package _global_
+# Tiny Codex backend for pmhctcr: gpt-5.6-terra on the ChatGPT subscription.
+# Same HarnessChat wire shape as config/llm/codex.yaml.
+#
+# Egress proxy is NOT pinned here (Hydra would dump the credential). The
+# launcher sources python_code_evolution/scripts/proxy.env into HTTPS_PROXY;
+# HarnessChat inherits the parent environment.
+
+model_name: codex/gpt-5.6-terra
+llm_base_url: harness://codex
+
+llm_max_concurrent: 1
+prefetch_factor: 1
+
+llm:
+  _target_: gigaevo.llm.models.MultiModelRouter
+  _convert_: all
+  structured_output_method: json_schema
+  models:
+    - _target_: gigaevo.llm.harness.HarnessChat
+      model_name: ${model_name}
+      request_timeout: ${request_timeout}
+      prompts_dir: ${prompts.dir}
+      schema_flag: --output-schema
+      schema_as_path: true
+      answer_file_flag: --output-last-message
+      strict_schema: true
+      stdin_prompts: true
+      command:
+        - codex
+        - exec
+        - --model
+        - gpt-5.6-terra
+        - -c
+        - model_reasoning_effort="medium"
+        - -c
+        - 'forced_login_method="chatgpt"'
+        - --sandbox
+        - read-only
+        - --ephemeral
+        - --skip-git-repo-check
+        - --json
+  probabilities: [1.0]
+  writer: ${ref:writer}
+  max_concurrent: ${llm_max_concurrent}

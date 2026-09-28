@@ -1,0 +1,10 @@
+TASK — TABULAR REGRESSION (tabarena-another-dataset-on-used-fiat-500)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] engine_power numeric
+- [1] age_in_days numeric
+- [2] km          numeric
+- [3] previous_owners numeric
+- [4] lat         numeric
+- [5] lon         numeric
+- [6] model       categorical (integer code), 3 levels: 0=lounge 1=pop 2=sport

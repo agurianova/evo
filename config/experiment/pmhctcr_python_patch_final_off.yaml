@@ -1,0 +1,16 @@
+# @package _global_
+# Expert-off python_patch run. Same MAP-Elites and seed as the final
+# experiment, but the suggestion prompt and task text do not carry the
+# expert writeup. expert_prompt stays disabled.
+
+defaults:
+  - /experiment/pmhctcr_python_patch_final
+  - override /expert_prompt: disabled
+  - _self_
+
+prompts:
+  dir: ${problem.dir}/prompts_python_patch_final_off
+
+problem_context:
+  task_description_file: task_description_final_off.txt
+  expert_hypotheses_enabled: false

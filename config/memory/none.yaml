@@ -1,0 +1,16 @@
+# memory=none — baseline, both sides off. The provider injects nothing and the
+# engine write hook is a no-op, so no memory LLM is billed.
+defaults:
+  - write: none
+  - _self_
+
+capabilities:
+  read: false
+  write: false
+
+provider:
+  _target_: gigaevo.memory.provider.NullMemoryProvider
+outcome_sink:
+  _target_: gigaevo.memory.outcomes.NullMemoryOutcomeSink
+writer:
+  _target_: gigaevo.evolution.engine.hooks.NullPostRunHook

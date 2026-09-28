@@ -1,0 +1,11 @@
+# @package _global_
+
+program_loader:
+  _target_: gigaevo.problems.initial_loaders.DirectoryProgramLoader
+  problem_dir: ${problem.dir}
+  pattern: ${loader.pattern}
+
+loader:
+  # Keep loader selection independent of defaults-list ordering: the selected
+  # representation owns its file suffix.
+  pattern: ${program_format.loader_pattern}

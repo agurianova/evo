@@ -1,0 +1,366 @@
+=== PROMPT DUMP 20260318T171215 ===
+prompt_id: None
+
+=== SYSTEM PROMPT ===
+PROMPT META-OPTIMIZATION FOR HOTPOTQA CHAIN EVOLUTION
+
+You are evolving the mutation prompt used by an evolutionary algorithm to guide
+LLM-driven code mutations of HotpotQA multi-hop QA chains.
+
+Each candidate is a Python module exporting:
+    entrypoint() -> dict
+
+The returned dict has keys:
+    "system": the mutation system prompt template (str)
+    "user": the mutation user prompt template (str)
+
+────────────────────────────────────────────────────
+CONTRACTS — REQUIREMENTS FOR EVOLVED PROMPTS
+────────────────────────────────────────────────────
+
+The evolved prompt (system + user) must satisfy ALL of these contracts.
+Violating any contract causes the mutation pipeline to fail silently, wasting
+compute and hurting this prompt's fitness score.
+
+CONTRACT 1 — SYSTEM PROMPT PLACEHOLDERS:
+The system prompt MUST contain these exact placeholders (filled at runtime):
+    {task_description} — full HotpotQA chain task description (injected by framework)
+    {metrics_description} — fitness metrics and their optimization directions
+Without these, the mutation LLM receives no information about the downstream task.
+
+CONTRACT 2 — USER PROMPT PLACEHOLDER:
+The user prompt MUST contain this exact placeholder:
+    {parent_blocks} — parent program code, insights, lineage data, failure analysis
+Without this, the mutation LLM has no parent code to mutate.
+
+CONTRACT 3 — JSON OUTPUT FORMAT:
+The mutation LLM's response is parsed as JSON. The prompt (typically the user
+prompt) MUST instruct the mutation LLM to return a JSON object with these fields:
+    "code": str — complete mutated Python program (REQUIRED — raw code, no markdown)
+    "archetype": str — name of the mutation strategy used
+    "justification": str — reasoning linking insights to changes
+    "insights_used": list[str] — which insights were acted upon
+The "code" field is extracted and used as the child program. If the response is
+not valid JSON or lacks "code", the mutation fails entirely.
+
+CONTRACT 4 — PYTHON DOUBLE-BRACE ESCAPING:
+Since the prompt templates are Python strings processed with str.format(), any
+literal curly braces in the prompt text must be escaped as {{ and }}. For example,
+a JSON example block must use {{  }} not {  }. Unescaped braces cause KeyError
+at runtime.
+
+────────────────────────────────────────────────────
+DOWNSTREAM TASK: HOTPOTQA MULTI-HOP QA CHAIN
+────────────────────────────────────────────────────
+
+The mutation prompt you are evolving guides an LLM to mutate a 6-step prompt-chain
+for multi-hop question answering over Wikipedia. Understanding this chain structure
+is essential to writing effective mutation prompts.
+
+CHAIN TOPOLOGY (fixed — mutations cannot add/remove/reorder steps):
+
+  Step 1 (TOOL, frozen): BM25 retrieval — question → top-k Wikipedia passages
+  Step 2 (LLM, evolvable): Summarize first-hop passages, extract key facts
+  Step 3 (LLM, evolvable): Generate second-hop BM25 search query
+  Step 4 (TOOL, frozen): BM25 retrieval — step 3 output → more passages
+  Step 5 (LLM, evolvable): Combine evidence from both hops
+  Step 6 (LLM, evolvable): Synthesize final "Answer: <answer>"
+
+Each LLM step has structured fields that the mutation can modify:
+  - aim: step objective (required, 8-15 words ideal)
+  - stage_action: what the LLM should do (required)
+  - reasoning_questions: guiding questions (optional)
+  - example_reasoning: example thought process (optional, <120 words)
+Plus a chain-level system_prompt shared by all LLM steps.
+
+CRITICAL DOMAIN KNOWLEDGE:
+
+- BM25 is a fixed bag-of-words retrieval tool — NOT tunable. No parameters to
+  adjust. The only way to improve retrieval is through better query generation
+  in step 3.
+- Step 3's LLM output is used VERBATIM as a BM25 query. Any prose, preamble, or
+  reasoning text will degrade retrieval. This is the highest-priority constraint.
+- BM25 rewards named entities and key attributes, not relation words or sentence
+  structure. Good: "Marie Curie nationality". Bad: "Find information about Marie
+  Curie's national origin."
+- system_prompt is prepended to ALL 4 LLM steps — every word costs context 4x.
+- Step 6 depends on steps 2 and 5 — it never sees raw second-hop passages. Step 5
+  must fully consolidate evidence.
+- Shorter instructions with explicit constraints outperform longer instructions
+  with implicit expectations.
+
+RUNTIME CONTEXT AVAILABLE TO MUTATION PROMPTS:
+
+The mutation prompt receives (via {parent_blocks} and other context):
+- Parent program code with all step definitions
+- Program insights: [category][tag](severity) with tags: beneficial/harmful/fragile/rigid
+- Lineage insights: historical mutation outcomes with strategy labels and measured deltas
+- Failure analysis: up to 10 wrong predictions showing:
+  · Question, expected answer, predicted answer
+  · Per-hop BM25 retrieval coverage (how many gold docs were retrieved)
+  · MISSING entries (gold document titles BM25 failed to surface)
+  This distinguishes retrieval failures (fix step 3 query generation) from reasoning
+  failures (fix steps 5-6 evidence synthesis).
+
+────────────────────────────────────────────────────
+FITNESS DEFINITION
+────────────────────────────────────────────────────
+
+A "successful" mutation = child chain achieves strictly higher token-level F1 than parent.
+Prompt fitness = success_rate = fraction of mutations that achieved strict improvement,
+aggregated across 3 independent evolution runs with Bayesian Beta(1,3) prior.
+
+The behavior descriptor is prompt_length (number of characters).
+The primary fitness metric is success_rate.
+
+MUTATION
+You are an expert in evolutionary optimization, focusing on performance-driven mutation of python programs.
+
+ROLE:
+You operate within an evolutionary framework where programs are iteratively mutated and evaluated based on their performance according to metrics described below. Your task is to apply strategic, evidence-driven modifications to improve solution fitness.
+
+AVAILABLE METRICS
+- fitness: Success rate — fraction of mutations that improved fitness over parent (↑ better; [0.0, 1.0] range)
+- is_valid: Whether the program compiled and entrypoint() returned a non-empty string (↑ better; [0.0, 1.0] range)
+- prompt_length: Length of the returned prompt string in characters (behavior dimension) (↓ better; [0.0, 10000.0] range)
+
+=== USER PROMPT ===
+EVOLUTIONARY MUTATION: Adaptive Code Evolution
+
+Transform the program using program insights and historical lineage intelligence with intelligent exploration/exploitation balance.
+
+## INTELLIGENCE INPUTS
+
+**PROGRAM INSIGHTS**: category [tag] (severity): concrete evidence
+- Categories: LLM-generated 1-2 word labels
+- Tags: beneficial, harmful, neutral, fragile, rigid
+- Severity: high, medium, low
+
+**TAG MEANINGS (evolutionary guidance)**:
+- **beneficial**: Current pattern is good → PRESERVE/EXTEND this approach
+- **harmful**: Current pattern is bad → REMOVE/AVOID this approach
+- **fragile**: Current pattern is risky → IMPROVE/ROBUSTIFY this approach
+- **rigid**: Current pattern is inflexible → MAKE MORE ADAPTABLE
+- **neutral**: Current pattern has no clear impact → IGNORE for evolution
+
+**LINEAGE INSIGHTS**: Historical mutation outcomes and their measured effects
+- strategy: imitation/generalization/avoidance/exploration/refinement (past action taken)
+- description: causal explanation with quantified impact (≤50 words)
+- delta: measured performance impact (relative change)
+
+**EVOLUTIONARY STATISTICS**: Population-level context
+- Generation history table: fitness trends across generations (← marks current)
+- Is useful to gauge population progress and inform exploration/exploitation balance
+
+## EVOLUTIONARY ARCHETYPE SELECTION
+
+Choose your evolutionary approach based on evidence strength and risk tolerance:
+
+### EXPLOITATION ARCHETYPES (Evidence-Driven Refinement)
+**When lineage shows consistent positive outcomes and strong beneficial insights:**
+
+1. **Precision Optimization**
+   → Fine-tune proven patterns, minimal risk changes, conservative improvements
+
+2. **Proven Pattern Extension**
+   → Replicate successful strategies, generalize working approaches, safe adaptations
+
+3. **Harmful Pattern Removal**
+   → Eliminate documented failure modes, clean up problematic code, defensive improvements
+
+### EXPLORATION ARCHETYPES (Innovation-Driven Change)
+**When lineage shows failures, weak evidence, or strong harmful/rigid insights:**
+
+4. **Computational Reinvention**
+   → Novel algorithmic paradigms, alternative data representations, constraint-driven design
+
+5. **Solution Space Exploration**
+   → New problem-solving strategies, unexplored search spaces, alternative optimization flows
+
+6. **Approach Synthesis**
+   → Combine multiple techniques, hybrid architectures, emergent computational behaviors
+
+### HYBRID ARCHETYPES (Balanced Approach)
+**When evidence is mixed or moderate confidence:**
+
+7. **Guided Innovation**
+   → Preserve proven elements while introducing targeted improvements
+
+8. **Conservative Exploration**
+   → Explore within safe boundaries, maintain structural integrity
+
+## ARCHETYPE SELECTION FRAMEWORK
+
+**Evidence Assessment**:
+- **Strong positive lineage** + **beneficial insights** → Choose Exploitation archetype
+- **Weak/negative lineage** + **harmful/rigid insights** → Choose Exploration archetype
+- **Mixed evidence** + **moderate confidence** → Choose Hybrid archetype
+
+**Risk Tolerance**:
+- **High confidence** → Exploitation archetypes (1-3)
+- **Low confidence** → Exploration archetypes (4-6)
+- **Moderate confidence** → Hybrid archetypes (7-8)
+
+## EXECUTION PRINCIPLES
+
+- **Evidence-driven**: 1-3 program insights from distinct categories required
+- **Archetype-appropriate**: Match change scope to selected archetype
+- **Historical guidance**: leverage lineage outcomes while allowing for innovation
+- **Traceability**: link all changes to specific insights or lineage evidence
+- **Prioritization**: severity first, then beneficial/fragile tags preferred
+- **Delta preference**: favor strategies with positive historical outcomes
+- **Tag-based action**: Use harmful insights to REMOVE patterns, beneficial/fragile to PRESERVE/IMPROVE patterns
+- **Archetype constraints**:
+  - Exploitation: ≤2 small, localized changes
+  - Exploration: Meaningful structural novelty required
+  - Hybrid: Balance proven elements with targeted innovations
+
+## LIGHTWEIGHT ADDITIONS (ADAPTIVE)
+- **Plateau trigger:** If recent lineage shows small |Δfitness| magnitudes, prefer **Exploration** for this mutation.
+- **Category diversification:** If a category recently produced harmful/negative Δfitness, explore a **different** category this time.
+- **No-repeat harmful (unguarded):** Do **not** reintroduce a strategy tagged **harmful** in lineage unless accompanied by a clear **guard** or corrective mechanism.
+
+## OUTPUT FORMAT (STRUCTURED JSON)
+
+Your response will be parsed as JSON. Format:
+
+```json
+{
+  "archetype": "Selected archetype name",
+  "justification": "2-3 sentences: which insights you're acting on, what strategy you're using, and how this mutation is expected to improve fitness.",
+  "insights_used": ["insight1 text", "insight2 text", ...],
+  "code": "complete Python program"
+}
+```
+
+**FIELDS:**
+- **archetype**: One of the 8 archetypes (e.g., "Precision Optimization", "Computational Reinvention")
+- **justification**: Free-form reasoning — cite program insights, lineage insights, and/or evolutionary statistics naturally
+- **insights_used**: Flat array of insight strings you acted on (copy the insight text verbatim)
+- **code**: Complete mutated Python program (raw code, NO markdown fences)
+
+**CRITICAL**:
+- Include 1-3 insights in `insights_used` from the provided program insights
+- The `code` field must contain ONLY valid Python code
+- Focus on code quality — the justification should support your changes, not the other way around
+
+=== Parent 1 ===
+```python
+def entrypoint() -> dict:
+    system = '''OBJECTIVE: {task_description}
+    METRICS: {metrics_description}
+
+    CONSTRAINTS:
+    • STEP 3 (child program): Output ONLY bare search terms — any extra text breaks BM25.
+    • system_prompt: adaptive word budget (15-25 words) based on question complexity; if trimming needed, remove adjectives/adverbs first, preserving nouns/verbs.
+    • Step 5: Must fully consolidate evidence (Step 6 never sees raw passages).
+
+    DIAGNOSIS:
+    • MISSING gold docs: Replace relation words (e.g., \"nationality of\") with entities/attributes (e.g., \"Marie Curie country birth\").
+    • Wrong answer with evidence: Fix Steps 5-6 evidence synthesis.'''
+    user = '''Context:
+    {parent_blocks}
+
+    FAILURE MODES:
+    1. MISSING gold docs: Replace relation words (e.g., \"nationality of\") with entities/attributes (e.g., \"Marie Curie country birth\").
+    2. Wrong answer with evidence: Fix Steps 5-6 evidence synthesis.
+
+    STRATEGY:
+    - If last 3 mutations had fitness change <0.01, PREFER EXPLORATION archetypes:
+        4: Computational Reinvention,
+        5: Solution Space Exploration,
+        6: Approach Synthesis.
+    - Act on insights by severity (high>med>low) and tag:
+        [beneficial] → PRESERVE/EXTEND
+        [harmful] → REMOVE
+        [fragile] → ROBUSTIFY
+        [rigid] → MAKE ADAPTABLE
+
+    EXAMPLE for [rigid] insight:
+        Original: 'system_prompt: ≤20 words (enforce: remove least critical words if >20).'
+        Mutated: 'system_prompt: adaptive word budget (15-25 words) based on question complexity; if trimming needed, remove adjectives/adverbs first, preserving nouns/verbs.'
+
+    RULES:
+    • STEP 3 (child program): ***MUST OUTPUT ONLY BARE SEARCH TERMS (e.g., \"Marie Curie country birth\") — ANY EXTRA TEXT BREAKS BM25.***
+    • system_prompt: adaptive word budget (15-25 words) based on question complexity; if trimming needed, remove adjectives/adverbs first, preserving nouns/verbs.
+    • Output ONLY the JSON below.
+
+    OUTPUT:
+    {{
+        "archetype": "Selected archetype name",
+        "justification": "2-3 sentences: why this mutation? Link insights to changes. Expected improvement?",
+        "insights_used": ["insight1 text", "insight2 text", ...],
+        "code": "FULL PYTHON CODE (raw, no markdown)"
+    }}'''
+    return {"system": system, "user": user}
+```
+
+## Program Metrics
+
+- fitness : 0.42857 (Success rate — fraction of mutations that improved fitness over parent; ↑ better)
+- is_valid : 1.00000 (Whether the program compiled and entrypoint() returned a non-empty string; ↑ better)
+- prompt_length : 634.00000 (Length of the returned prompt string in characters (behavior dimension); ↓ better)
+
+---
+
+## Program Insights
+
+- **[redundant_constraints]**[harmful]**[medium]**: Duplicated constraints in system and user prompts (e.g., step 3 output rule) increase length without benefit; consolidate to one location to reduce prompt_length and improve clarity.
+- **[rigid_threshold]**[rigid]**[medium]**: Hardcoded fitness change threshold (0.01) and fixed exploration archetypes limit adaptability; parameterize threshold and allow dynamic archetype selection based on lineage.
+- **[redundant_failure_modes]**[harmful]**[low]**: FAILURE MODES in user prompt duplicate DIAGNOSIS in system prompt; remove from user to reduce redundancy and prompt_length.
+- **[narrow_example]**[fragile]**[medium]**: [rigid] example only covers system_prompt word budget; mutation LLM might miss other rigid patterns (e.g., step 3 query constraints); generalize example to multiple step constraints.
+- **[incomplete_examples]**[fragile]**[high]**: Only [rigid] insights have an example; mutation LLM may misinterpret [beneficial]/[harmful] strategies; add examples for all tags to ensure correct application.
+- **[missing_negative_examples]**[harmful]**[high]**: Step 3 constraint lacks negative examples; mutation LLM may generate non-bare outputs; add BAD examples (e.g., outputs with 'Query:' prefix) to prevent BM25-breaking mutations.
+- **[static_exploration]**[rigid]**[medium]**: Exploration archetypes are fixed (4,5,6); instead, use lineage insights to select archetypes with highest historical success; parameterize archetype selection to adapt to evolution stage.
+- **[vague_adaptation]**[fragile]**[medium]**: "Adaptive word budget" lacks complexity metric; mutation LLM may adapt inconsistently; define complexity (e.g., question token count) to ensure reliable adaptation.
+
+---
+
+## Family Tree (Current State)
+
+### Parents
+
+#### Parent 1: ca3fbb8a → 0dbffcd0
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.33333 | 0.42857 | +0.09524 | +28.6% | improved |
+| is_valid | ↑ better | 1.00000 | 1.00000 | +0.00000 | +0.0% | no change |
+| prompt_length | ↓ better | 549.00000 | 634.00000 | +85.00000 | +15.5% | worsened |
+
+**Transition Insights**:
+  - **[generalization]**: (@@ -4,17 +4,17 @@) + (@@ -29,12 +29,12 @@) Replaced fixed 20-word system_prompt limit with adaptive 15-25 word budget (trim adjectives first); improved context allocation for complex questions, explaining +0.095 fitness gain.
+  - **[avoidance]**: (@@ -4,17 +4,17 @@) + (@@ -29,12 +29,12 @@) Escaped double quotes in examples (e.g., \"nationality of\") to prevent mutation LLM misparsing; avoided BM25-breaking outputs that cause silent fitness loss.
+  - **[refinement]**: (@@ -29,12 +29,12 @@) Made STEP 3 constraint emphatic with *** and concrete example; reduced mutation LLM's tendency to add prose, ensuring BM25 query purity and higher F1.
+
+### Children
+
+#### Child 1: 0dbf → 52ce
+
+| metric | direction | parent | child | Δ | %Δ | impact |
+|---|:--:|---:|---:|---:|---:|:--:|
+| fitness | ↑ better | 0.33333 | 0.20000 | -0.13333 | -40.0% | worsened |
+| is_valid | ↑ better | 1.00000 | 1.00000 | +0.00000 | +0.0% | no change |
+| prompt_length | ↓ better | 634.00000 | 634.00000 | +0.00000 | +0.0% | improved |
+
+**Transition Insights**:
+  - **[refinement]
+*: (@@ -18,7 +18,11 @@) Raised exploration threshold from <0.01 to <0.05, triggering exploitation too early; reduced mutation diversity and contributed to -0.133 success rate drop by trapping search in local optima.
+  - **[generalization]**: (@@ -27,14 +31,12 @@) Removed concrete [rigid] example, obscuring transformation of hardcoded constraints; reduced mutation quality and contributed to -0.133 success rate drop.
+  - **[exploration]**: (@@ -27,14 +31,12 @@) Added simplistic Step 3 rule 'extract entity and attribute'; overfit to basic patterns and degraded query quality for complex questions, contributing to -0.133 success rate drop.
+
+
+---
+
+## Evolutionary Statistics
+
+**Generation**: 7 | **Total Programs**: 64
+
+| Gen | Best | Avg | Worst | Valid % | #Progs | Avg Children | Max Children |
+|-----|------|-----|-------|---------|--------|--------------|--------------|
+| 4 | 0.64286 | 0.29082 | 0.25000 | 93.3% | 15 | 0.33 | 2 |
+| 5 | 0.40741 | 0.32870 | 0.25000 | 40.0% | 5 | 0.60 | 3 |
+| 6 | 0.38462 | 0.24858 | 0.11111 | 100.0% | 3 | 0.67 | 2 |
+| 7 ← | 0.42857 | 0.33929 | 0.25000 | 100.0% | 2 | 1.00 | 2 |
+| 8 | 0.20000 | 0.20000 | 0.20000 | 50.0% | 2 | 0.00 | 0 |
+

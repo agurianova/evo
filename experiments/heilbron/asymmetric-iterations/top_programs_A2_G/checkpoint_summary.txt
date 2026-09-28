@@ -1,0 +1,4 @@
+Label: A2_G
+DB: 3
+Gen: 11
+Best fitness: 0.89799

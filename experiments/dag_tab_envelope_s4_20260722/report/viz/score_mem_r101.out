@@ -1,0 +1,60 @@
+{
+ "seed": {
+  "id": "f302c081-7234-41dc-add5-5195534aeaa5",
+  "cv_r2": 0.8508204597700112,
+  "generation": 1,
+  "neighbour": false,
+  "memory_card_ids_used": [],
+  "test_rmse": 0.4293296818973237,
+  "test_r2": 0.8586423692720541
+ },
+ "best": {
+  "id": "777c20fb-143c-4f3a-ae0a-c41aa77e9bdd",
+  "cv_r2": 0.8810169255047074,
+  "generation": 8,
+  "neighbour": true,
+  "memory_card_ids_used": [],
+  "test_rmse": 0.37674639854065434,
+  "test_r2": 0.8911481920007359
+ },
+ "best_no_neighbour": {
+  "id": "24699997-5dfb-424b-b06a-3239157d7625",
+  "cv_r2": 0.8655888596835005,
+  "generation": 3,
+  "neighbour": false,
+  "memory_card_ids_used": [],
+  "test_rmse": 0.39867772564625237,
+  "test_r2": 0.8781062684914743
+ },
+ "best_explicit_memory": {
+  "id": "c1fbe7ff-4124-4982-98ee-4819279753fe",
+  "cv_r2": 0.8805005404058551,
+  "generation": 7,
+  "neighbour": true,
+  "memory_card_ids_used": [
+   "mem-45c42d56aff74876a1e07c13b3cc9f1a"
+  ],
+  "test_rmse": 0.3738945784811877,
+  "test_r2": 0.8927898845084392
+ },
+ "panel": [
+  {
+   "id": "777c20fb-143c-4f3a-ae0a-c41aa77e9bdd",
+   "cv_r2": 0.8810169255047074,
+   "generation": 8,
+   "neighbour": true,
+   "memory_card_ids_used": [],
+   "test_rmse": 0.37674639854065434,
+   "test_r2": 0.8911481920007359
+  },
+  {
+   "id": "24699997-5dfb-424b-b06a-3239157d7625",
+   "cv_r2": 0.8655888596835005,
+   "generation": 3,
+   "neighbour": false,
+   "memory_card_ids_used": [],
+   "test_rmse": 0.39867772564625237,
+   "test_r2": 0.8781062684914743
+  }
+ ]
+}

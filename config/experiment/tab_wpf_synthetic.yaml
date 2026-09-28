@@ -1,0 +1,37 @@
+# @package _global_
+
+defaults:
+  - /experiment/base
+  - override /pipeline: guided
+  - override /memory: none
+  - override /program_format: json_document
+  - override /loader: tab_wpf_seed
+  - override /mutation: structured_diff_tab_wpf
+  - override /algorithm: tab_wpf_structure_2d
+  - _self_
+
+problem:
+  name: tab_wpf
+  dataset: california  # Unused in synthetic mode; retained for config compatibility.
+  evaluation_mode: synthetic
+  task_bank: ${oc.env:GIGAEVO_TAB_WPF_TASK_BANK,''}
+  task_split: meta_train
+
+memory_task_key: tab_wpf/synthetic_v1/meta_train
+
+# Validator code runs in child Python executors and therefore receives the
+# protocol lock through inherited environment variables.  This also makes a
+# direct `run.py experiment=tab_wpf_synthetic` invocation consistent with the
+# guarded launcher instead of silently falling back to real California data.
+hydra:
+  job:
+    env_set:
+      GIGAEVO_TAB_WPF_EVAL_MODE: ${problem.evaluation_mode}
+      GIGAEVO_TAB_WPF_TASK_BANK: ${problem.task_bank}
+      GIGAEVO_TAB_WPF_META_SPLIT: ${problem.task_split}
+
+# Each candidate evaluates 60 complete tasks.  Keep candidate-level
+# concurrency conservative; inner numpy/sklearn code stays CPU-only.
+max_in_flight: 2
+llm_max_concurrent: 2
+max_tokens: 8192

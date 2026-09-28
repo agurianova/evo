@@ -1,0 +1,7 @@
+TASK — TABULAR BINARY CLASSIFICATION (tabarena-blood-transfusion-service-center)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] MonthsSinceLastDonation numeric
+- [1] NumberOfDonations numeric
+- [2] TotalBloodDonated numeric
+- [3] MonthsSinceFirstDonation numeric

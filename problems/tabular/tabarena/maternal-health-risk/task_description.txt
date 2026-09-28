@@ -1,0 +1,9 @@
+TASK — TABULAR MULTICLASS CLASSIFICATION (tabarena-maternal-health-risk, 3 classes)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Age         numeric
+- [1] SystolicBP  numeric
+- [2] DiastolicBP numeric
+- [3] BS          numeric
+- [4] BodyTemp    numeric
+- [5] HeartRate   numeric

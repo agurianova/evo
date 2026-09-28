@@ -1,0 +1,18 @@
+\begin{tabular}{lrrr}
+\toprule
+rejecting guard & replica 101 & replica 202 & replica 303 \\
+\midrule
+\textbf{malformed JSON / schema violation} & 0 & 0 & 0 \\
+target transform/inverse: undefined or unbound name & 0 & 0 & 1 \\
+target transform/inverse: wrong output shape & 0 & 0 & 0 \\
+target transform/inverse: no round-trip & 0 & 0 & 0 \\
+node: declared columns not produced & 0 & 0 & 0 \\
+node: undeclared columns produced & 0 & 0 & 0 \\
+node: declared numerical, produced non-numeric & 0 & 2 & 0 \\
+node: removed pre-existing columns & 1 & 0 & 0 \\
+own-target leakage (probe) & 2 & 1 & 0 \\
+node body: Python error at execution & 1 & 0 & 0 \\
+\midrule
+total invalid & 4 & 3 & 1 \\
+\bottomrule
+\end{tabular}

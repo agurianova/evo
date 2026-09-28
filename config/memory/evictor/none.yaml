@@ -1,0 +1,3 @@
+# @package memory.evictor
+# Explicit causal-retirement ablation; content writing remains enabled.
+_target_: gigaevo.memory.write.eviction.NullEvictor

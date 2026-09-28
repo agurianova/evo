@@ -1,0 +1,12 @@
+TASK — TABULAR REGRESSION (tabarena-physiochemical-protein)
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] TotalSurfaceArea numeric
+- [1] NonPolarExposedArea numeric
+- [2] FracExposedNonPolarResidue numeric
+- [3] FracExposedNonPolarPart numeric
+- [4] MassWeightedExposedArea numeric
+- [5] AvgDeviationExposedArea numeric
+- [6] EuclideanDistance numeric
+- [7] SecondaryStructurePenalty numeric
+- [8] SpatialDistNK numeric

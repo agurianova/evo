@@ -1,0 +1,14 @@
+TASK — TABULAR REGRESSION (black-friday)
+
+DATASET — predict a customer's purchase amount at a Black Friday retail event from demographic and product-category attributes
+
+COLUMNS (assembled X[:, j], left to right)
+- [0] Occupation  customer occupation, masked code 0-20 (treated as numeric)
+- [1] Product_Category_1 primary product category, integer 1-18 (no missing)
+- [2] Product_Category_2 secondary product category, integer 2-18 (sparser; originally ~31% missing)
+- [3] Product_Category_3 tertiary product category, integer 3-18 (sparsest; originally ~69% missing)
+- [4] Marital_Status 0=single, 1=married (~40% married)
+- [5] Gender      customer gender — categorical (integer code), 2 levels: 0=F 1=M
+- [6] Age         age range bin — categorical (integer code), 7 levels: 0=0-17 1=18-25 2=26-35 3=36-45 4=46-50 5=51-55 6=55+
+- [7] City_Category city tier (anonymized) — categorical (integer code), 3 levels: 0=A 1=B 2=C
+- [8] Stay_In_Current_City_Years years lived in current city — categorical (integer code), 5 levels: 0=0 1=1 2=2 3=3 4=4+

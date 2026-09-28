@@ -1,0 +1,96 @@
+def entrypoint():
+    return {
+        "system_prompt": "You are an expert fact-checker. Your task is to verify claims by retrieving evidence from Wikipedia through multi-hop search.\nIn query generation steps, you will be given retrieved passages from the previous hop. Your job is to analyze these passages to determine if more evidence is needed to verify the claim. If all evidence is found, output nothing. Otherwise, output a concise search query for the next hop that covers the most critical missing information. Output ONLY the query string or nothing (e.g., do not output: 'Query: ...', just the raw query).\nExamples of bad outputs:\n  - DO NOT output: 'Here is the query: ...'\n  - DO NOT output: 'Query: Eiffel Tower construction start year'\n  - Correct: 'Eiffel Tower construction start year'",
+        "steps": [
+            {
+                "number": 1,
+                "title": "Retrieve first-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$outer_context"},
+                },
+                "dependencies": [],
+            },
+            {
+                "number": 2,
+                "title": "Generate second-hop query",
+                "step_type": "llm",
+                "aim": "Determine if more evidence is needed and generate next search query",
+                "stage_action": "Read the retrieved passages from the previous hop. Break down the claim into key components. For each component, list the evidence found so far and what is still missing. If all components are verified, output nothing. Otherwise, output a concise search query for the most critical missing piece, combining multiple gaps if they are related. Output ONLY the query string or nothing.",
+                "reasoning_questions": "What are the key components of the claim (e.g., entities, dates, relations)? For each component, what evidence have we found in the passages? What evidence is still missing? Which missing pieces are most critical for verification? Can multiple gaps be addressed by a single query (e.g., 'Eiffel Tower start year designer' or 'Treaty of Versailles role in causing World War II')?",
+                "example_reasoning": "Example 1 (combined query):\nClaim: 'The Eiffel Tower was built in 1887 by Gustave Eiffel.'\nPassages:\n[1] Eiffel Tower | Completed in 1889.\n[2] Gustave Eiffel | Designed many structures.\nComponent breakdown:\n- Entity: Eiffel Tower -> verified\n- Construction start year: missing (only completion year 1889 found)\n- Designer: Gustave Eiffel -> verified as designer\n- Claimed start year: 1887 -> not verified\nCritical gaps: construction start year and designer's role in construction\nCombined query: 'Eiffel Tower construction start year Gustave Eiffel'\n\nExample 2 (causal gap):\nClaim: 'World War II was caused by the Treaty of Versailles.'\nPassages:\n[1] Treaty of Versailles | Signed in 1919, imposed harsh penalties on Germany.\n[2] World War II | Began in 1939.\nComponent breakdown:\n- Event: Treaty of Versailles -> verified\n- Event: World War II -> verified\n- Causal link: missing (how the treaty caused the war)\nCritical gap: causal relationship\nQuery: 'Treaty of Versailles role in causing World War II'",
+                "dependencies": [1],
+            },
+            {
+                "number": 3,
+                "title": "Retrieve second-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [2],
+            },
+            {
+                "number": 4,
+                "title": "Generate third-hop query",
+                "step_type": "llm",
+                "aim": "Determine if more evidence is needed and generate next search query",
+                "stage_action": "Read the retrieved passages from the previous hop. Break down the claim into key components. For each component, list the evidence found so far and what is still missing. If all components are verified, output nothing. Otherwise, output a concise search query for the most critical missing piece, combining multiple gaps if they are related. Output ONLY the query string or nothing.",
+                "reasoning_questions": "What are the key components of the claim (e.g., entities, dates, relations)? For each component, what evidence have we found in the passages? What evidence is still missing? Which missing pieces are most critical for verification? Can multiple gaps be addressed by a single query (e.g., 'Eiffel Tower start year designer' or 'Treaty of Versailles role in causing World War II')?",
+                "example_reasoning": "Example 1 (combined query):\nClaim: 'The Eiffel Tower was built in 1887 by Gustave Eiffel.'\nPassages:\n[1] Eiffel Tower | Completed in 1889.\n[2] Gustave Eiffel | Designed many structures.\nComponent breakdown:\n- Entity: Eiffel Tower -> verified\n- Construction start year: missing (only completion year 1889 found)\n- Designer: Gustave Eiffel -> verified as designer\n- Claimed start year: 1887 -> not verified\nCritical gaps: construction start year and designer's role in construction\nCombined query: 'Eiffel Tower construction start year Gustave Eiffel'\n\nExample 2 (causal gap):\nClaim: 'World War II was caused by the Treaty of Versailles.'\nPassages:\n[1] Treaty of Versailles | Signed in 1919, imposed harsh penalties on Germany.\n[2] World War II | Began in 1939.\nComponent breakdown:\n- Event: Treaty of Versailles -> verified\n- Event: World War II -> verified\n- Causal link: missing (how the treaty caused the war)\nCritical gap: causal relationship\nQuery: 'Treaty of Versailles role in causing World War II'",
+                "dependencies": [3],
+            },
+            {
+                "number": 5,
+                "title": "Retrieve third-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [4],
+            },
+            {
+                "number": 6,
+                "title": "Generate fourth-hop query",
+                "step_type": "llm",
+                "aim": "Determine if more evidence is needed and generate next search query",
+                "stage_action": "Read the retrieved passages from the previous hop. Break down the claim into key components. For each component, list the evidence found so far and what is still missing. If all components are verified, output nothing. Otherwise, output a concise search query for the most critical missing piece, combining multiple gaps if they are related. Output ONLY the query string or nothing.",
+                "reasoning_questions": "What are the key components of the claim (e.g., entities, dates, relations)? For each component, what evidence have we found in the passages? What evidence is still missing? Which missing pieces are most critical for verification? Can multiple gaps be addressed by a single query (e.g., 'Eiffel Tower start year designer' or 'Treaty of Versailles role in causing World War II')?",
+                "example_reasoning": "Example 1 (combined query):\nClaim: 'The Eiffel Tower was built in 1887 by Gustave Eiffel.'\nPassages:\n[1] Eiffel Tower | Completed in 1889.\n[2] Gustave Eiffel | Designed many structures.\nComponent breakdown:\n- Entity: Eiffel Tower -> verified\n- Construction start year: missing (only completion year 1889 found)\n- Designer: Gustave Eiffel -> verified as designer\n- Claimed start year: 1887 -> not verified\nCritical gaps: construction start year and designer's role in construction\nCombined query: 'Eiffel Tower construction start year Gustave Eiffel'\n\nExample 2 (causal gap):\nClaim: 'World War II was caused by the Treaty of Versailles.'\nPassages:\n[1] Treaty of Versailles | Signed in 1919, imposed harsh penalties on Germany.\n[2] World War II | Began in 1939.\nComponent breakdown:\n- Event: Treaty of Versailles -> verified\n- Event: World War II -> verified\n- Causal link: missing (how the treaty caused the war)\nCritical gap: causal relationship\nQuery: 'Treaty of Versailles role in causing World War II'",
+                "dependencies": [5],
+            },
+            {
+                "number": 7,
+                "title": "Retrieve fourth-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [6],
+            },
+            {
+                "number": 8,
+                "title": "Generate fifth-hop query",
+                "step_type": "llm",
+                "aim": "Determine if more evidence is needed and generate next search query",
+                "stage_action": "Read the retrieved passages from the previous hop. Break down the claim into key components. For each component, list the evidence found so far and what is still missing. If all components are verified, output nothing. Otherwise, output a concise search query for the most critical missing piece, combining multiple gaps if they are related. Output ONLY the query string or nothing.",
+                "reasoning_questions": "What are the key components of the claim (e.g., entities, dates, relations)? For each component, what evidence have we found in the passages? What evidence is still missing? Which missing pieces are most critical for verification? Can multiple gaps be addressed by a single query (e.g., 'Eiffel Tower start year designer' or 'Treaty of Versailles role in causing World War II')?",
+                "example_reasoning": "Example 1 (combined query):\nClaim: 'The Eiffel Tower was built in 1887 by Gustave Eiffel.'\nPassages:\n[1] Eiffel Tower | Completed in 1889.\n[2] Gustave Eiffel | Designed many structures.\nComponent breakdown:\n- Entity: Eiffel Tower -> verified\n- Construction start year: missing (only completion year 1889 found)\n- Designer: Gustave Eiffel -> verified as designer\n- Claimed start year: 1887 -> not verified\nCritical gaps: construction start year and designer's role in construction\nCombined query: 'Eiffel Tower construction start year Gustave Eiffel'\n\nExample 2 (causal gap):\nClaim: 'World War II was caused by the Treaty of Versailles.'\nPassages:\n[1] Treaty of Versailles | Signed in 1919, imposed harsh penalties on Germany.\n[2] World War II | Began in 1939.\nComponent breakdown:\n- Event: Treaty of Versailles -> verified\n- Event: World War II -> verified\n- Causal link: missing (how the treaty caused the war)\nCritical gap: causal relationship\nQuery: 'Treaty of Versailles role in causing World War II'",
+                "dependencies": [7],
+            },
+            {
+                "number": 9,
+                "title": "Retrieve fifth-hop passages",
+                "step_type": "tool",
+                "step_config": {
+                    "tool_name": "retrieve_deep",
+                    "input_mapping": {"query": "$history[-1]"},
+                },
+                "dependencies": [8],
+            },
+        ],
+    }

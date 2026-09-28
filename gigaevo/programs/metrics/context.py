@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+import math
+from typing import Any, Protocol, TypeVar
+
+from pydantic import BaseModel, Field, model_validator
+
+__all__ = ["MetricSpec", "MetricsContext"]
+
+
+class HasMetrics(Protocol):
+    """Anything scoreable by :meth:`MetricsContext.top_valid_programs`."""
+
+    id: str
+    metrics: dict[str, float]
+
+
+ScoredT = TypeVar("ScoredT", bound=HasMetrics)
+
+# Constants
+MAX_VALUE_DEFAULT: float = 1e5
+MIN_VALUE_DEFAULT: float = -1e5
+EPSILON: float = 1e-6
+VALIDITY_KEY: str = "is_valid"
+DEFAULT_DECIMALS: int = 5
+
+
+class MetricSpec(BaseModel):
+    description: str
+    decimals: int = DEFAULT_DECIMALS
+    is_primary: bool = False
+    higher_is_better: bool
+    unit: str | None = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    include_in_prompts: bool = True
+    significant_change: float | None = None
+    sentinel_value: float | None = None
+
+    @model_validator(mode="after")
+    def _set_default_sentinel_value(self) -> MetricSpec:
+        """Set default sentinel value based on optimization direction."""
+        if self.sentinel_value is None:
+            self.sentinel_value = (
+                MIN_VALUE_DEFAULT if self.higher_is_better else MAX_VALUE_DEFAULT
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_sentinel_bounds(self) -> MetricSpec:
+        """Validate that sentinel value is outside the bounds interval (exclusive)."""
+        if (
+            self.lower_bound is not None
+            and self.upper_bound is not None
+            and self.sentinel_value is not None
+        ):
+            if self.lower_bound < self.sentinel_value < self.upper_bound:
+                raise ValueError(
+                    f"Sentinel value {self.sentinel_value} must be outside bounds "
+                    f"[{self.lower_bound}, {self.upper_bound}]"
+                )
+        return self
+
+    def is_sentinel(self, value: float) -> bool:
+        """Check if a value is the sentinel value for this metric."""
+        return (
+            self.sentinel_value is not None
+            and abs(value - self.sentinel_value) < EPSILON
+        )
+
+
+class MetricsContext(BaseModel):
+    """Centralized definition of metrics and their properties.
+
+    Holds primary optimization metric and any additional metrics that may be
+    displayed in prompts. Provides consistent access to descriptions and
+    formatting preferences.
+    """
+
+    # All metric specs keyed by metric name. Must include exactly one primary metric.
+    specs: dict[str, MetricSpec] = Field(default_factory=dict)
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    @model_validator(mode="after")
+    def _validate_primary_spec(self) -> MetricsContext:
+        """Validate exactly one primary metric exists."""
+        primary_specs = [s for s in self.specs.values() if s.is_primary]
+        if len(primary_specs) != 1:
+            raise ValueError(
+                f"Exactly one MetricSpec must have is_primary=True, found {len(primary_specs)}"
+            )
+        return self
+
+    def get_primary_spec(self) -> MetricSpec:
+        """Get the MetricSpec for the primary metric.
+
+        Returns:
+            The MetricSpec marked as primary
+
+        Raises:
+            ValueError: If no primary metric is found (should not happen after validation)
+        """
+        for spec in self.specs.values():
+            if spec.is_primary:
+                return spec
+        raise ValueError("No primary metric found in MetricsContext")
+
+    def get_primary_key(self) -> str:
+        """Get the key of the primary metric.
+
+        Returns:
+            The metric key marked as primary
+
+        Raises:
+            ValueError: If no primary metric is found (should not happen after validation)
+        """
+        for key, spec in self.specs.items():
+            if spec.is_primary:
+                return key
+        raise ValueError("No primary metric found in MetricsContext")
+
+    def get_description(self, key: str) -> str:
+        """Get the description for a metric.
+
+        Args:
+            key: The metric key
+
+        Returns:
+            The metric description
+        """
+        return self.specs[key].description
+
+    def get_decimals(self, key: str) -> int:
+        """Get the decimal precision for a metric.
+
+        Args:
+            key: The metric key
+
+        Returns:
+            Number of decimal places to display
+
+        """
+        return self.specs[key].decimals
+
+    def metrics_descriptions(self) -> dict[str, str]:
+        """Return mapping of metric key -> description for all known metrics."""
+        return {k: v.description for k, v in self.specs.items()}
+
+    def prompt_keys(self) -> list[str]:
+        """Return ordered metric keys intended for prompts.
+
+        Order rules:
+        - Primary first, then others sorted alphabetically
+        - Always filter by include_in_prompts flag
+        """
+        primary_key = self.get_primary_key()
+        remaining = [k for k in sorted(self.specs.keys()) if k != primary_key]
+        ordered = [primary_key] + remaining
+        return [k for k in ordered if self.specs[k].include_in_prompts]
+
+    def additional_metrics(self) -> dict[str, str]:
+        """Return mapping of non-primary metrics that have descriptions."""
+        primary_key = self.get_primary_key()
+        return {
+            k: spec.description for k, spec in self.specs.items() if k != primary_key
+        }
+
+    def get_sentinels(self) -> dict[str, float]:
+        """Get worst-case sentinel values for all metrics.
+
+        Returns:
+            Dictionary mapping metric keys to their sentinel values
+        """
+        return {
+            k: spec.sentinel_value
+            for k, spec in self.specs.items()
+            if spec.sentinel_value is not None
+        }
+
+    def is_valid(self, metrics: Mapping[str, float]) -> bool:
+        """True iff this metrics dict represents a valid evaluation.
+
+        Reads VALIDITY_KEY with a default of 1.0 so callers don't have to
+        remember the sentinel-vs-missing distinction. Any value strictly
+        less than 1.0 is treated as invalid.
+        """
+        return float(metrics.get(VALIDITY_KEY, 1.0)) >= 1.0
+
+    def is_sentinel(self, metric_name: str, value: float) -> bool:
+        """Delegate to MetricSpec.is_sentinel; False if metric is unknown."""
+        spec = self.specs.get(metric_name)
+        return spec is not None and spec.is_sentinel(value)
+
+    def strict_fitness(self, metrics: Mapping[str, float], key: str) -> float | None:
+        """Fitness under ``key`` for stat tracking, or ``None`` for invalid.
+
+        Strict semantics: a missing VALIDITY_KEY is invalid — the contract is
+        that every evaluated program carries the flag (contrast
+        :meth:`is_valid`, which defaults a missing flag to valid — correct for
+        metric aggregation, not for stat tracking). Non-finite and sentinel
+        fitness values are rejected even when the program claims validity:
+        a sentinel floor treated as real would manufacture catastrophic harm
+        (invalid child) or phantom improvement (invalid parent baseline).
+        """
+        is_valid = metrics.get(VALIDITY_KEY)
+        if is_valid is None or is_valid <= 0:
+            return None
+        fit = metrics.get(key)
+        if fit is None or not math.isfinite(fit):
+            return None
+        if self.is_sentinel(key, fit):
+            return None
+        return float(fit)
+
+    def is_evaluated_invalid(self, metrics: Mapping[str, float], key: str) -> bool:
+        """True iff evaluated and judged invalid — a real negative outcome a
+        downside posterior must count as harm, unlike a program that simply
+        never produced a fitness (missing VALIDITY_KEY: not evaluated, no
+        signal)."""
+        is_valid = metrics.get(VALIDITY_KEY)
+        if is_valid is None:
+            return False
+        if is_valid <= 0:
+            return True
+        fit = metrics.get(key)
+        if fit is None or not math.isfinite(fit):
+            return False
+        return self.is_sentinel(key, fit)
+
+    def top_valid_programs(
+        self,
+        programs: Sequence[ScoredT],
+        *,
+        key: str,
+        percent: float,
+    ) -> list[tuple[ScoredT, float]]:
+        """The top slice of strictly-valid programs under ``key``, as
+        (program, fitness) pairs, honoring the metric's direction."""
+        if percent <= 0:
+            return []
+        scored = [
+            (prog, fit)
+            for prog in programs
+            for fit in (self.strict_fitness(prog.metrics, key),)
+            if fit is not None
+        ]
+        if not scored:
+            return []
+        scored.sort(
+            key=lambda pair: (pair[1], pair[0].id),
+            reverse=self.is_higher_better(key),
+        )
+        count = max(1, math.ceil(len(scored) * percent / 100.0))
+        return scored[:count]
+
+    def get_bounds(self, key: str) -> tuple[float, float] | None:
+        """Get the bounds for a metric if defined.
+
+        Args:
+            key: The metric key
+
+        Returns:
+            Tuple of (lower_bound, upper_bound) or None if not fully defined
+
+        Raises:
+            KeyError: If metric key not found
+        """
+        spec = self.specs[key]
+        if spec.lower_bound is None or spec.upper_bound is None:
+            return None
+        return (spec.lower_bound, spec.upper_bound)
+
+    def is_higher_better(self, key: str) -> bool:
+        """Check if higher values are better for a metric.
+
+        Args:
+            key: The metric key
+
+        Returns:
+            True if higher is better, False otherwise
+
+        Raises:
+            KeyError: If metric key not found
+        """
+        return self.specs[key].higher_is_better
+
+    def add_metric(self, key: str, spec: MetricSpec) -> MetricsContext:
+        if key in self.specs:
+            raise ValueError(f"Metric key '{key}' already exists in context")
+
+        if spec.is_primary:
+            raise ValueError(
+                f"Cannot add primary metric '{key}': context already has a primary metric"
+            )
+
+        self.specs[key] = spec
+        return self
+
+    @classmethod
+    def from_descriptions(
+        cls,
+        *,
+        primary_key: str,
+        primary_description: str,
+        higher_is_better: bool = True,
+        additional_metrics: dict[str, str] | None = None,
+        additional_metrics_higher_is_better: dict[str, bool] | None = None,
+        decimals: int = DEFAULT_DECIMALS,
+        per_metric_decimals: dict[str, int] | None = None,
+    ) -> MetricsContext:
+        """Convenience constructor from simple description mappings.
+
+        By default, all additional metrics are higher_is_better=True.
+
+        Args:
+            primary_key: Key for the primary optimization metric
+            primary_description: Description of the primary metric
+            higher_is_better: Whether higher is better for primary metric
+            additional_metrics: Optional mapping of additional metric keys to descriptions
+            additional_metrics_higher_is_better: Optional per-metric optimization direction
+            decimals: Default decimal precision for all metrics
+            per_metric_decimals: Optional per-metric decimal precision overrides
+
+        Returns:
+            New MetricsContext instance
+        """
+        specs: dict[str, MetricSpec] = {}
+        specs[primary_key] = MetricSpec(
+            description=primary_description,
+            decimals=(per_metric_decimals or {}).get(primary_key, decimals),
+            is_primary=True,
+            higher_is_better=higher_is_better,
+        )
+        for k, desc in (additional_metrics or {}).items():
+            specs[k] = MetricSpec(
+                description=desc,
+                decimals=(per_metric_decimals or {}).get(k, decimals),
+                higher_is_better=(additional_metrics_higher_is_better or {}).get(
+                    k, True
+                ),
+            )
+        return cls(specs=specs)
+
+    @classmethod
+    def from_dict(
+        cls,
+        *,
+        specs: dict[str, dict[str, Any]],
+    ) -> MetricsContext:
+        """Create MetricsContext from a dictionary of metric key -> spec fields.
+
+        Args:
+            specs: Dictionary mapping metric keys to spec field dictionaries
+
+        Returns:
+            New MetricsContext instance
+        """
+        built: dict[str, MetricSpec] = {}
+        for key, data in specs.items():
+            data = dict(data)
+            built[key] = MetricSpec(**data)
+        return cls(specs=built)

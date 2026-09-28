@@ -1,0 +1,18 @@
+# Server model probe — heilbron/v1-honest-repro launch
+# Captured: 2026-04-26T03:00:00Z
+# Proxy URL: http://10.232.30.185:4000/v1
+# API key: sk-gigaevo
+
+# Note: proxy /v1/models endpoint returns OpenAPI schema rather than model
+# list (gateway quirk). Verified model availability via direct chat probe:
+
+# POST /v1/chat/completions with model=Qwen3-235B-A22B-Thinking-2507
+# -> 200 OK, chatcmpl-818a6fff8e89bf29, served by Qwen3-235B-A22B-Thinking-2507
+# -> reasoning_content present (thinking model active), max_tokens=1 honored
+
+# Model used by all 8 runs (A1_G/D, A2_G/D, C1_G/D, C2_G/D):
+Qwen3-235B-A22B-Thinking-2507
+
+# This matches the model used in the v1 baseline experiment
+# (heilbron/asymmetric-iterations PR #204), preserving identical generation
+# behavior for the reproduction stress test.

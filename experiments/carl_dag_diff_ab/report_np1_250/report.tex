@@ -1,0 +1,393 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.6cm]{geometry}
+\usepackage{mathpazo}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}
+\emergencystretch=3em
+
+\definecolor{accent}{HTML}{1F4E79}
+\definecolor{good}{HTML}{1A7F37}
+\definecolor{bad}{HTML}{B42318}
+\titleformat{\section}{\Large\bfseries\color{accent}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent!80!black}}{\thesubsection}{0.8em}{}
+\captionsetup{font=small,labelfont={bf,color=accent}}
+\newcommand{\armA}{\textcolor{bad}{arm A}}
+\newcommand{\armB}{\textcolor{accent}{arm B}}
+
+\lstdefinestyle{json}{
+  basicstyle=\ttfamily\footnotesize,
+  backgroundcolor=\color{gray!8},
+  frame=single, rulecolor=\color{gray!40}, framerule=0.4pt,
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, aboveskip=8pt, belowskip=8pt}
+\lstset{style=json}
+
+\newsavebox{\eliBox}
+\newenvironment{eli5}
+  {\par\medskip\noindent\begin{lrbox}{\eliBox}\begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule}\small}
+  {\end{minipage}\end{lrbox}\noindent\fcolorbox{accent!40}{accent!4}{\usebox{\eliBox}}\par\medskip}
+
+\title{\color{accent}\bfseries Structured DAG-Diff Mutation for CARL Reasoning Chains\\
+\large Weak-Model Stress A/B: does constrained decoding hold when the mutator is cheap?\\
+\large (single-parent, \texttt{llama-3.1-8b}, iteration-matched on the first 100 mutants)}
+\author{GigaEvo}
+\date{2026-07-03}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+We replaced free-form JSON rewriting of CARL reasoning-chain genomes with a
+\emph{schema-constrained positional-slot diff}: the mutation LLM emits a typed edit whose
+grammar is compiled per parent, enforced by the provider's constrained decoding, validated
+with pydantic, and applied deterministically. Two prior A/B runs on a strong reasoning
+mutator (gemini-3.5-flash) showed the diff eliminating parse failures at a token premium.
+This run stresses the opposite regime: we deliberately picked a \emph{weak, cheap,
+non-reasoning} 8B mutator (\texttt{meta-llama/llama-3.1-8b-instruct}) to make the free-form
+path fail, ran both arms from scratch with \texttt{num\_parents=1}, stopped the slow rewrite
+arm at 100 accepted mutants, and compared both arms over their \textbf{first 100 mutants,
+iteration-matched}. The contrast is now stark. \textbf{The rewrite arm persisted 43 invalid
+children out of 100} (40 malformed-JSON, 3 other) and needed 139 LLM calls to accept 100
+mutants (39 pre-persist generation failures on top); \textbf{the diff arm persisted 0 invalid
+children out of 100}, took 101 calls (one retry), and logged a single benign
+diff-schema rejection caught before persist. Because the model is non-reasoning
+(reasoning tokens $=0$ on both arms), the diff's real output saving is finally unmasked:
+\textbf{output 42.5K (diff) vs 120.4K (rewrite) --- the diff spends 35\% of the rewrite's
+output tokens} (mean 419 vs 1{,}204 per completed call), at comparable input (478K vs 460K).
+Fitness is at parity at the top ($\sim$0.50 both) with a higher diff child-mean (0.413 vs
+0.362): constrained edits degrade less. The two arms diverge structurally --- the rewrite's
+best child is a \emph{degenerate 1-step collapse} of the 4-step seed (0.506), while the diff
+preserves coherent multi-step chains (91/100 at 8 steps) and its best over the full run is a
+legible 4-step prune (0.525, above the rewrite's peak). We reconstruct that best diff program
+as a series of slot-diffs from the seed (\S\ref{sec:series}): extend $4\!\to\!8$ steps, carry
+the structure through re-evaluations, prune back to 4 --- every hop a human-readable, provably
+well-formed edit.
+\end{abstract}
+
+\section{Motivation}
+CARL chain genomes are wire-JSON documents (\texttt{ReasoningChain.to\_dict} plus platform
+extras). The stock mutation path asks the LLM to rewrite the whole document as free text:
+every emission re-risks the entire syntax, and a malformed child is only discovered
+\emph{after} it has been persisted and (for a parse that survives extraction) has consumed a
+full evaluation. The hypothesis: constraining mutation to a typed diff language --- where
+structural validity is enforced by the provider's constrained decoding and a pydantic
+contract --- eliminates that failure class at the cheapest possible stage.
+
+The earlier A/B pair ran this on \texttt{gemini-3.5-flash}, a capable reasoning model that
+rarely emits malformed JSON unprompted; there the rewrite arm lost only a handful of mutants
+and the argument rested on principle (unrepresentable-by-construction) more than on a large
+observed gap. The obvious question: \emph{does the guarantee matter when the mutator is
+weak?} A cheap non-reasoning model is exactly where free-form structured emission is known to
+break --- truncated objects, dropped required keys, prose leakage. If constrained decoding is
+worth its schema cost, this is where it should show.
+
+\section{Setup}
+\label{sec:setup}
+Two arms, run from scratch, identical except the mutation operator:
+\begin{itemize}
+  \item \textbf{Mutator:} \texttt{meta-llama/llama-3.1-8b-instruct} via OpenRouter --- cheap,
+  older, \emph{non-reasoning}. Chosen after probing candidates: its provider
+  \emph{enforces} the \texttt{json\_schema} contract (so the diff arm's grammar is honoured),
+  yet it is weak enough to break free-form JSON emission ($\sim$25\% malformed in a probe).
+  \item \textbf{Executor:} \texttt{Qwen3-235B-A22B-Instruct} via the LiteLLM proxy, scoring
+  each child by mean ROUGE-L F1 on the summarizer eval set (higher better).
+  \item \textbf{Config:} \texttt{problems/chains/summarizer}, \texttt{memory=none},
+  \texttt{num\_parents=1}, 4 seeds, disk storage. \armA{} = stock full wire-JSON rewrite with
+  a chain-faithful prompt; \armB{} = structured slot diff (\S\ref{sec:language}).
+  \item \textbf{Stopping \& matching:} the rewrite arm is the slow one (it retries failed
+  generations), so it was stopped at exactly 100 accepted mutants; the diff arm ran to 250+.
+  \textbf{All comparisons below are iteration-matched on each arm's first 100 accepted
+  mutants} (retries and pre-persist failures counted as the cost of reaching 100).
+\end{itemize}
+
+\noindent\textbf{Single parent.} With \texttt{num\_parents=1} the diff grammar collapses to
+its single-parent form: \texttt{base\_parent} is one letter, and every \texttt{keep}-id enum
+ranges over one parent's steps. Crossover (keeping a donor parent's step) is therefore
+unavailable in this run --- a deliberate simplification, with the two-parent crossover schema
+left as prior work. The grammar is otherwise byte-for-byte the shipped one; the single-parent
+schema ($\sim$16.6\,KB) is within 1\% of the two-parent schema, so this does not materially
+change the constrained-decoding load.
+
+\section{The diff language}
+\label{sec:language}
+The child chain is a shelf of eight numbered slots; the LLM fills them left-to-right. This is
+the shipped fixed-key object encoding (E4) --- the same grammar the earlier A/B ran.
+
+\begin{eli5}
+Imagine the child chain as a shelf of eight numbered boxes. To describe a new chain, you fill
+boxes from the left. Into each box you put either a \emph{photocopy} of a step from the parent
+--- naming it by its printed label, like \texttt{a2}, optionally with corrections scribbled on
+top --- or a \emph{brand-new} step you write yourself. Every box also declares which earlier
+boxes it reads from, and here is the trick: the form for box $k$ only has checkboxes for boxes
+$1..k-1$. Pointing at yourself or at a later box is not ``against the rules'' --- there is
+literally no place on the form to write it. Box~1 has no checkboxes at all; it reads the raw
+task input. When you are done, the remaining boxes stay empty (no gaps allowed), and whatever
+sits in the last filled box produces the answer that gets graded.
+\end{eli5}
+\noindent
+The LLM never writes a chain; it fills in this form. The form is a JSON schema compiled fresh
+for each mutation from the actual parent, and the provider's constrained decoding guarantees
+the reply matches the form --- a violating token can never even be sampled. Alongside the
+slots the diff carries an \emph{evidence surface} identical to the standard mutation
+operator's (\texttt{archetype} from a shared vocabulary, a falsifiable \texttt{justification},
+\texttt{insights\_used}/\texttt{insight\_ids\_used}, \texttt{card\_ids\_used},
+\texttt{changes}), so diff children self-report change in the same shape as rewrite children
+and flow through the citation-integrity check on the same path.
+
+\subsection{What the grammar makes impossible}
+The design goal: a defect class should be \emph{unrepresentable}, not detected. What an
+unconstrained rewriter routinely gets wrong, this language cannot even spell:
+\begin{table}[H]\centering\small
+\begin{tabular}{ll}
+\toprule
+illegal child & why it cannot be emitted \\
+\midrule
+self-dependency (\texttt{slot\_k} $\to$ \texttt{slot\_k}) & slot $k$'s enum stops at \texttt{slot\_{k-1}} \\
+forward dependency (\texttt{slot\_2} $\to$ \texttt{slot\_5}) & same enum narrowing \\
+any dependency on slot 1 & the field does not exist there; extra keys rejected \\
+dependency cycle & impossible transitively: all edges point backwards \\
+keep of a nonexistent step (\texttt{a9}) & \texttt{id} enum is compiled from the actual parent \\
+9-step chain & there is no \texttt{slot\_9} property \\
+empty chain & \texttt{slot\_1} is required \\
+empty \texttt{title}/\texttt{aim} & \texttt{minLength: 1} in the schema \\
+runaway \texttt{dependencies} list & \texttt{maxItems}: $k-1$ caps the array \\
+invented fields, malformed JSON & \texttt{additionalProperties: false}; constrained decoding \\
+\midrule
+gap fill (\texttt{slot\_3} filled, \texttt{slot\_2} null) & \emph{the} residual pydantic validator (contiguity) \\
+\bottomrule
+\end{tabular}
+\caption{Everything above the line is enforced by the decoding grammar itself. Contiguity is
+the single rule left to a validator. Enforcement is a two-layer contract: per-mutation schema
+compilation (\texttt{AllowedDagChanges.build\_schema}) shipped to the provider as the
+\texttt{json\_schema} structured-output grammar, then the same pydantic model as a backstop
+before anything touches the engine. A rejection costs one LLM call --- nothing persisted,
+nothing evaluated.}
+\end{table}
+
+\subsection{Operator and vocabulary seam}
+Two pieces, both behind existing seams:
+\path{gigaevo/evolution/mutation/structured_diff.py} is the generic engine-level operator
+\texttt{StructuredDiffMutationOperator} (ask an \texttt{AllowedChanges} vocabulary for a
+\texttt{DiffSchema}, run a structured-output call, validate, apply --- it knows nothing about
+chains); \path{gigaevo/chains/dag_changes.py} is \texttt{AllowedDagChanges}, the chain-specific
+vocabulary --- schema compilation, parent rendering (the \texttt{a1}/\texttt{a2} listings the
+LLM sees), the deterministic applier, and the natural-language contract injected into the
+prompt. The applier walks \texttt{slot\_1..slot\_8} to the first \texttt{null}, copies content
+from the referenced parent step and overlays \texttt{edits}, turns \texttt{dependencies} into
+sorted integer positions, stamps the last step as the output, and round-trips through
+\texttt{ReasoningChain} as a final assertion --- the child is indistinguishable in format from
+a hand-written genome.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Validity funnel --- the headline}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+first 100 accepted mutants & \armA{} (rewrite) & \armB{} (diff) \\
+\midrule
+mutation LLM calls to accept 100 & 139 & \textbf{101} \\
+\quad calls per accepted mutant & 1.39$\times$ & \textbf{1.01$\times$} \\
+pre-persist generation failures & 39 (no code extracted) & \textbf{1} (diff schema) \\
+children persisted & 100 & 100 \\
+\quad valid & 57 & \textbf{100} \\
+\quad \textbf{invalid persisted} & \textbf{\textcolor{bad}{43}} & \textbf{\textcolor{good}{0}} \\
+\qquad of which \texttt{json\_parse\_error} & 40 & --- \\
+\qquad other validation & 3 & --- \\
+\textbf{valid yield among persisted} & \textbf{\textcolor{bad}{57\%}} & \textbf{\textcolor{good}{100\%}} \\
+\bottomrule
+\end{tabular}
+\caption{The weak mutator breaks the free-form path exactly where the design predicts. \armA{}
+fails at two stages: 39 emissions never yield extractable code (retried), and \textbf{43 of
+the 100 that do persist are structurally invalid} --- 40 malformed JSON (\texttt{json\_parse\_error})
+that each burned an evaluation before being marked invalid, plus 3 other validation failures.
+\armB{} took \textbf{101 calls for 100 mutants (one retry)} and persisted
+\textbf{zero} invalid children; its one logged rejection was a diff-schema check that
+fired \emph{before} persist, so nothing invalid ever entered the population. Everything the
+grammar forbids (\S\ref{sec:language}) simply never arrived.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_overview.png}
+\caption{Left: per-child fitness (dots) and best-so-far (line); \armA's invalid children are
+drawn as crosses at $y=0$ --- 40 of them, versus none for \armB. Right: the validity funnel,
+first 100 accepted mutants. \armA{} needs 139 attempts and keeps 57 valid; \armB{} needs 101
+and keeps 100.}
+\end{figure}
+
+\subsection{Token cost --- the diff's output saving, finally unmasked}
+The earlier strong-model A/B could not cleanly show the diff's output economy because
+\texttt{gemini-3.5-flash} burned a large, variable \emph{reasoning} channel that dominated the
+output bill. This mutator is non-reasoning: \textbf{reasoning tokens are 0 on both arms}, so
+billed output is the actual mutation payload and nothing else.
+\begin{table}[H]\centering
+\begin{tabular}{lccc}
+\toprule
+mutation side (\texttt{llama-3.1-8b}), first 100 accepted & \armA{} & \armB{} & \armB{} vs \armA{} \\
+\midrule
+tokens in & 460{,}446 & 483{,}088 & $+4.9\%$ \\
+\textbf{tokens out} & \textbf{120{,}441} & \textbf{42{,}463} & \textbf{\textcolor{good}{$-65\%$}} \\
+tokens reasoning & 0 & 0 & --- \\
+mean output per completed call & 1{,}204 & \textbf{420} & \textbf{\textcolor{good}{$-65\%$}} \\
+LLM calls (incl.\ retries) & 139 & 101 & $-27\%$ \\
+executor completion tokens (children) & 56{,}609 & 265{,}602 & $+369\%$ \\
+\bottomrule
+\end{tabular}
+\caption{On a non-reasoning mutator the diff spends \textbf{35\% of the rewrite's output
+tokens} --- 420 vs 1{,}204 per completed call --- because it emits slot deltas, not a whole
+re-serialised genome. Input is near-parity ($+4.9\%$): the diff schema is larger, but
+\texttt{num\_parents=1} renders only one parent, and the schema premium that dominated the
+two-parent run is offset here. \armA{} also pays 39 extra calls in retries. The one place the
+diff costs \emph{more} is downstream: it preserves long chains, so its children run longer on
+the executor ($4.7\times$ the completion tokens) --- the flip side of \S\ref{sec:struct}. Net
+on the mutation side: the diff is both more reliable and cheaper to emit.}
+\end{table}
+\begin{figure}[H]\centering
+\includegraphics[width=\textwidth]{ab_tokens.png}
+\caption{Per-mutant token spend. Left: output tokens per mutation call (dots) with a 10-call
+rolling mean; \armA{} (red) scatters higher and runs to 139 calls, \armB{} (blue) sits low and
+tight and stops at 100. Right: cumulative tokens --- the output curves separate sharply
+(\armB{} $\approx$ 42K vs \armA{} $\approx$ 120K) while the input curves nearly coincide.}
+\end{figure}
+
+\subsection{Fitness --- parity at the top, higher diff mean}
+\begin{table}[H]\centering
+\begin{tabular}{lcc}
+\toprule
+first 100 accepted mutants & \armA{} (rewrite) & \armB{} (diff) \\
+\midrule
+best child & \textbf{0.506} & 0.487 \\
+child mean & 0.362 & \textbf{0.413} \\
+child median & 0.385 & \textbf{0.429} \\
+seed best (executor re-score) & 0.482 & 0.505 \\
+best child over the \emph{full} run & (stopped at 100) & \textbf{0.525} @ iter 190 \\
+\bottomrule
+\end{tabular}
+\caption{Both arms top out near 0.50. The rewrite owns the first-100 peak (0.506) --- but that
+child is a degenerate 1-step collapse (\S\ref{sec:struct}). The diff's child \emph{mean} is
+higher (0.413 vs 0.362): small schema-constrained edits stay closer to a working parent, so
+the child distribution degrades less. The 4 shared seeds re-score differently across the two
+runs (0.482 vs 0.505) purely from executor sampling noise; there is no same-config variance
+floor for this task yet, so with one replicate per arm we claim \emph{parity}, not a fitness
+win for either. The diff's best over its full run (0.525) does clear the rewrite's peak, on a
+coherent 4-step chain rather than a collapsed one.}
+\end{table}
+
+\subsection{Structural exploration --- the arms diverge}
+\label{sec:struct}
+This is where the operators behave differently. The free-form rewriter, asked to re-emit the
+whole genome, tends to \emph{simplify}: its valid children concentrate at 1--3 steps
+($\{1\!:\!3,\ 2\!:\!21,\ 3\!:\!25,\ 4\!:\!6,\ 5\!:\!2\}$), and its best child is a
+\textbf{single step} --- the 4-step seed pipeline collapsed to one ``read-and-summarise''
+instruction. The diff operator, editing locally around an 8-step parent, keeps structure:
+\textbf{91 of 100 valid children have 8 steps}. The language admits deletion (just omit a
+slot), and the diff \emph{does} prune when it pays --- its own best program prunes $8\!\to\!4$
+(\S\ref{sec:series}) --- but it does not collapse the chain wholesale the way an
+unconstrained rewrite does.
+\begin{figure}[H]\centering
+\includegraphics[width=0.72\textwidth]{ab_nsteps.png}
+\caption{Chain-length distribution of valid children. \armA{} (rewrite) collapses toward short
+chains; \armB{} (diff) preserves the parent's 8-step structure.}
+\end{figure}
+
+\subsection{Evidence surface}
+Every \armB{} child carries the aligned self-report: \texttt{justification} on 98/100,
+\texttt{insights\_used} on 96/100 (parent structural insights --- \texttt{card\_ids\_used} is
+0 everywhere, consistent with \texttt{memory=none}), a \texttt{changes} list on 32/100, and
+\texttt{archetype} drawn from the shared vocabulary --- though the weak model uses only two of
+the six labels (Guided Innovation 52, Precision Optimization 48), against the six-way spread
+the strong model produced. The instrumentation is live; a memory-on run would give the
+citation-integrity check something to score.
+
+\section{Best programs, and the diff series that built one}
+\label{sec:series}
+\subsection{The two arms' best children look nothing alike}
+\armA's best child (iter 59, fitness 0.506) is a \textbf{one-step chain} --- the rewriter
+threw away the seed's Read $\to$ Select $\to$ Draft $\to$ Finalise pipeline and emitted a
+single instruction:
+\begin{lstlisting}
+step 1 (output): "Summarize paragraph"
+  aim: Produce exactly one concise sentence that captures the main idea.
+  action: Read the source text from the Data section; reply with one sentence.
+\end{lstlisting}
+It scores well on ROUGE-L, but the DAG is gone: there is nothing left to mutate structurally,
+and no intermediate reasoning to inspect. This is the free-form failure mode that is not a
+crash --- a \emph{valid} child that has quietly discarded the search space.
+
+\subsection{\armB's best, reconstructed as slot-diffs from the seed}
+\armB's best program over the full run (iter 190, fitness 0.525) keeps a coherent 4-step
+chain, and --- because every mutation is a typed diff --- its entire history is legible. The
+single-parent lineage from the seed is six nodes; each hop is a well-formed, human-readable
+edit (the grammar guaranteed it before it was ever evaluated):
+\begin{center}\small
+\begin{tabular}{llll}
+\toprule
+node & fitness & steps & the diff (archetype; move) \\
+\midrule
+seed & 0.432 & 4 & --- (Read $\to$ Select $\to$ Draft $\to$ Finalise) \\
+gen2 & 0.436 & 8 & Guided Innovation: \textbf{extend $4\!\to\!8$}, edit 4 stage-actions/aims \\
+gen3 & 0.487 & 8 & Precision Optimization: keep all 8 (re-eval) \\
+gen4 & 0.421 & 8 & Precision Optimization: keep all 8 (re-eval) \\
+gen5 & 0.506 & 8 & Precision Optimization: keep all 8 (re-eval) \\
+\textbf{gen6} & \textbf{0.525} & \textbf{4} & Precision Optimization: \textbf{prune $8\!\to\!4$}, keep slots 1--4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The two \emph{structural} hops are the interesting ones, and both are one-line diffs. The
+extension (gen2) duplicates parent steps into new slots and rewrites their content:
+\begin{lstlisting}
+{"archetype": "Guided Innovation", "base_parent": "A",
+ "slot_1": {"id": "a1", "kind": "keep",
+            "edits": {"stage_action": "Use a cached or pre-loaded source text"}},
+ "slot_2": {"id": "a2", "kind": "keep",
+            "edits": {"aim": "Segment the text into claims before selecting the main idea"}},
+ "slot_3": {"id": "a3", "kind": "keep"},  "slot_4": {"id": "a4", "kind": "keep"},
+ "slot_5": {"id": "a3", "kind": "keep",
+            "edits": {"stage_action": "Polish the drafted sentence into one sentence"}},
+ "slot_6": {"id": "a4", "kind": "keep"},
+ "slot_7": {"id": "a4", "kind": "keep",
+            "edits": {"stage_action": "Maintain language consistency"}},
+ "slot_8": {"id": "a4", "kind": "keep"}}
+\end{lstlisting}
+The prune (gen6) is pure omission --- fill four slots, leave the rest null:
+\begin{lstlisting}
+{"archetype": "Precision Optimization", "base_parent": "A",
+ "justification": "the rigid 8-step structure is a bottleneck; simplify by removing steps",
+ "slot_1": {"id": "a1", "kind": "keep"}, "slot_2": {"id": "a2", "kind": "keep"},
+ "slot_3": {"id": "a3", "kind": "keep"}, "slot_4": {"id": "a4", "kind": "keep"},
+ "slot_5": null, "slot_6": null, "slot_7": null, "slot_8": null}
+\end{lstlisting}
+The intervening hops (gen3--gen5) are all-\texttt{keep} diffs that re-run the same genome; the
+fitness wobble across them (0.487, 0.421, 0.506) is executor sampling noise, not diff-driven
+improvement. The honest reading: on this task and this weak mutator, most of the diff arm's
+motion is structural bookkeeping riding a stochastic executor, with two genuine
+grammar-legal structural edits (extend, prune) at the ends. What the diff \emph{guarantees}
+is that every one of these six programs was well-formed by construction --- none of them could
+have been the malformed JSON that \armA{} persisted 40 times.
+
+\section{Verdict}
+The hypothesis holds \emph{most} strongly exactly where it should: with a weak, cheap,
+non-reasoning mutator, free-form JSON rewriting persisted \textbf{43 invalid children out of
+100} (40 malformed JSON) and needed 39 pre-persist retries, while the constrained diff
+persisted \textbf{0 invalid children out of 100} with a single retried pre-persist
+schema rejection. The non-reasoning model also unmasks the diff's output economy that the strong-model
+run had hidden: \textbf{diff output is 35\% of the rewrite's} (420 vs 1{,}204 tokens per
+completed call) at near-parity input. Fitness is at parity at the top ($\sim$0.50), with a
+higher diff child-mean (0.413 vs 0.362); the two operators diverge structurally --- the
+rewrite collapses chains (its best is a 1-step degenerate), the diff preserves and locally
+edits them (best a coherent 4-step prune at 0.525, above the rewrite's peak), and every diff
+child's history reads as a clean series of typed edits (\S\ref{sec:series}). The one cost that
+grows is downstream executor tokens, because the diff keeps longer chains alive. Caveats
+unchanged: single replicate per arm, no same-config variance floor, \texttt{memory=none} so
+citation-integrity is instrumented but trivially \texttt{0/0}, and \texttt{num\_parents=1} so
+crossover was out of scope. Next: a variance floor on this task, a two-parent run to exercise
+crossover diffs, and a memory-on run to give the evidence surface something to cite.
+\end{document}
